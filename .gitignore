@@ -1,5 +1,14 @@
 /db/bookmgr.db
 /db/bookmgr.db-*
 /bookmgr
+/bookmgr-cli
 /tmp/
 *.test
+
+# Android
+android/.gradle/
+android/.idea/
+android/*.iml
+android/local.properties
+android/*/build/
+android/*/*.iml

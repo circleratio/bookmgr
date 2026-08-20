@@ -21,6 +21,15 @@
 # 認証
 - APIキーによる簡易認証を行う。
 
+# APIクライアント
+- サーバーのREST API（`/api/*`）を操作するCLIクライアントを提供する。蔵書のCRUD・検索・ISBN検索ができる。
+
+# Androidクライアント
+- サーバーのREST API（`/api/*`）を操作するAndroidアプリを提供する。
+- Web版と同等の機能を持つ：ログイン（APIキー保持）、一覧・検索、詳細表示、新規登録・編集・削除、ISBNからの書誌情報取得（Google Books API）。
+- 接続先サーバーURL・APIキーはアプリ内の設定画面で入力する。
+- UIはJetpack Composeで実装する。
+
 # 技術スタック
 - go / Gin Web Framework
 - sqlite3

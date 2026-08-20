@@ -31,6 +31,26 @@ go build -o bookmgr ./cmd/server
 API_KEY=your-secret-key ./bookmgr
 ```
 
+## CLIクライアント
+
+```sh
+go build -o bookmgr-cli ./cmd/cli
+
+export BOOKMGR_API_URL=http://localhost:8080   # 任意（デフォルト http://localhost:8080）
+export BOOKMGR_API_KEY=your-secret-key         # 必須（サーバーの API_KEY と同じ値）
+
+./bookmgr-cli list --q 猫
+./bookmgr-cli get 1
+./bookmgr-cli create --title "吾輩は猫である" --author "夏目漱石" --rating 5
+./bookmgr-cli update 1 --title "坊っちゃん" --author "夏目漱石"
+./bookmgr-cli delete 1
+./bookmgr-cli isbn-lookup 9784101010359
+```
+
+## Androidクライアント
+
+`android/` 配下に独立したGradle/Kotlin(Jetpack Compose)プロジェクトとして実装している。Android Studioで `android/` を開いて実行する。詳細は `android/README.md` を参照。
+
 ## テスト
 
 ```sh

@@ -14,7 +14,9 @@
 ```
 cmd/
   server/
-    main.go            # エントリポイント、ルーティング定義
+    main.go            # サーバーのエントリポイント、ルーティング定義
+  cli/
+    main.go            # CLIクライアントのエントリポイント
 internal/
   model/                # 構造体定義（Book等）
   repository/           # DBアクセス層（database/sql）
@@ -23,15 +25,20 @@ internal/
     api/                 # REST APIハンドラ
     web/                 # SSR画面ハンドラ
   middleware/            # APIキー認証ミドルウェア
+  apiclient/             # REST APIを呼び出すGoクライアント（cmd/cliが利用）
 db/
   migrations/            # DDL（SQLファイル）
   bookmgr.db             # sqlite3ファイル（実行時生成、.gitignore対象）
 templates/                # HTMLテンプレート（html/template）
 static/                    # CSS等の静的ファイル
+android/                    # Androidアプリ（独立したGradle/Kotlinプロジェクト）
 docs/
   requirement.md
   spec.md
+  plan.md
 ```
+
+サーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）とCLI（`cmd/cli`, `internal/apiclient`）は同じGoモジュール内に同居する。CLIはサーバーの内部パッケージ（`repository`等）には依存せず、`internal/apiclient`経由でHTTP/JSON APIのみを利用する。Androidは別言語・別ビルドシステムのため`android/`配下に完全に独立させ、Goモジュールのビルド対象には含めない。
 
 # DB設計
 
@@ -114,6 +121,7 @@ CREATE INDEX idx_books_author ON books(author);
 | POST | /api/books | 蔵書登録 |
 | PUT | /api/books/:id | 蔵書更新 |
 | DELETE | /api/books/:id | 蔵書削除 |
+| GET | /api/isbn-lookup | ISBNから書誌情報を取得（Google Books API連携） |
 
 ### GET /api/books
 
@@ -155,6 +163,16 @@ CREATE INDEX idx_books_author ON books(author);
 | publisher | 任意、最大255文字 |
 | published_date | 任意、`YYYY-MM-DD`形式 |
 
+### GET /api/isbn-lookup
+
+クエリパラメータ:
+
+| パラメータ | 型 | 必須 | 説明 |
+|---|---|---|---|
+| isbn | string | 必須 | 検索対象のISBN（ハイフン有無どちらも可） |
+
+`GET /books/isbn-lookup`（SSR画面用、Cookie認証）と同じ`ISBNLookupService`を呼び出す、`X-API-Key`ヘッダー認証版のエンドポイント。CLI・Androidなどブラウザ以外のAPIクライアントはこちらを使う。レスポンス形式・エラー内容は `# ISBN検索（Google Books API連携）` を参照（成功時は`{"data": {...}}`、`isbn`未指定は`400 VALIDATION_ERROR`、該当なしは`404 NOT_FOUND`、外部API呼び出し失敗は`502`相当）。
+
 ### エラーコード
 
 | HTTPステータス | code | 状況 |
@@ -187,12 +205,36 @@ CREATE INDEX idx_books_author ON books(author);
 # ISBN検索（Google Books API連携）
 
 - 新規登録フォームにISBN入力欄と「取得」ボタンを設け、クリック時にブラウザから `GET /books/isbn-lookup?isbn=...` へfetchする（Cookieセッションで認証済みの画面用エンドポイントであり、`/api/*`とは別。`/api/*`はヘッダー認証のためブラウザJSから直接呼べないことによる）。
-- サーバー側は `internal/service` にある `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出し、最初の検索結果から 書名・著者（複数著者は`,`区切りで連結）・出版社・出版日・ISBN（`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値）を取得する。
+- サーバー側は `internal/service` にある `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出す。検索結果には同じ書籍でもメタデータの充実度が異なる複数の候補（`items`）が含まれることがあるため、全候補を走査し各項目（書名・著者・出版社・出版日）で最初に見つかった非空の値を採用する。著者は複数著者を`,`区切りで連結する。ISBNは`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値を使う。
 - 取得成功時: `200 { "data": { "title", "author", "publisher", "published_date", "isbn" } }`。フロントエンドJSが該当フォーム項目（書名・著者・出版社・出版日・ISBN）に反映する。評価・メモはGoogle Books側に無いため対象外。
 - 該当書籍が見つからない場合: `404 { "error": "..." }`。
 - APIキー未指定・不正な場合や外部API呼び出し失敗時: `400`/`502` 相当のエラーJSON。
 - Google BooksのAPIキー（`GOOGLE_BOOKS_API_KEY`）は任意。設定時のみクエリパラメータ`key`として付与する（未設定でも動作する）。
 - `publishedDate`が年のみ（`YYYY`）や年月のみ（`YYYY-MM`）の場合は、フォームの`date`入力欄に収まるよう`-01-01`/`-01`を補って`YYYY-MM-DD`に正規化する。
+
+# CLIクライアント
+
+- `cmd/cli` に実装するGo製CLI。`internal/apiclient` の共通HTTPクライアント（`/api/*`を`X-API-Key`ヘッダー認証で呼び出す）を使う。
+- 接続設定は環境変数で受け取る: `BOOKMGR_API_URL`（例: `http://localhost:8080`）, `BOOKMGR_API_KEY`（必須）。
+- サブコマンド:
+  | コマンド | 説明 |
+  |---|---|
+  | `bookmgr-cli list [--q ...] [--page N] [--page-size N]` | 一覧・検索（表形式で出力） |
+  | `bookmgr-cli get <id>` | 詳細取得（JSON出力） |
+  | `bookmgr-cli create --title ... --author ... [--rating N] [--isbn ...] [--publisher ...] [--published-date ...] [--memo ...]` | 新規登録 |
+  | `bookmgr-cli update <id> [同上のフラグ]` | 更新 |
+  | `bookmgr-cli delete <id>` | 削除 |
+  | `bookmgr-cli isbn-lookup <isbn>` | ISBNから書誌情報取得（`GET /api/isbn-lookup`） |
+- APIのエラーレスポンス（`{"error":{"code","message"}}`）はそのままエラーメッセージとして標準エラー出力に表示し、終了コード1で終了する。
+
+# Androidクライアント
+
+- `android/` に独立したGradle/Kotlinプロジェクトとして実装する（ルートのGoモジュールには含めない）。
+- UI: Jetpack Compose + Material3。画面遷移はNavigation Compose。
+- 機能はWeb版と同等: 設定（サーバーURL・APIキー入力、端末内に保存）、一覧・検索（ページング）、詳細表示、新規登録・編集・削除、ISBN入力による書誌情報取得（`GET /api/isbn-lookup`）。
+- 通信: `/api/*` を `X-API-Key` ヘッダー認証で直接呼び出す（Web版と異なりCookieを使わないため、サーバー側の変更は不要）。
+- 設定値の永続化: Jetpack DataStore（Preferences）。
+- 初回起動時、サーバーURL・APIキーが未設定であれば設定画面を表示する。
 
 # 非機能
 

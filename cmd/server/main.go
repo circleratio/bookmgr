@@ -57,6 +57,7 @@ func main() {
 	apiGroup := r.Group("/api")
 	apiGroup.Use(middleware.APIKeyAuth(apiKey))
 	apihandler.NewBookHandler(bookService).Register(apiGroup)
+	apihandler.NewISBNLookupHandler(isbnLookupService).Register(apiGroup)
 
 	log.Printf("listening on :%s", port)
 	if err := r.Run(":" + port); err != nil {

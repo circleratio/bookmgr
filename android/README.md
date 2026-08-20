@@ -1,0 +1,46 @@
+# bookmgr Android クライアント
+
+`bookmgr` サーバーのREST API（`/api/*`）を操作するAndroidアプリ。Jetpack Compose + Material3。
+
+機能はWeb版と同等: 一覧・検索・ページング、詳細表示、新規登録・編集・削除、ISBN入力によるGoogle Books書誌情報取得。
+
+## セットアップ
+
+1. Android Studio（Koala以降を推奨）でこの `android/` ディレクトリを開く。
+2. Gradle Sync を実行する（初回、`gradle/wrapper/gradle-wrapper.jar` が無い場合はAndroid Studioが生成方法を案内するか、`gradlew`/`gradlew.bat` が無い場合は File > Sync/New Project の指示に従う。手元にGradleがインストールされていれば `gradle wrapper` を実行してラッパーを生成してもよい）。
+3. compileSdk/targetSdk 34, minSdk 26 のAndroid SDKコンポーネントがインストールされていることを確認する。
+4. エミュレータまたは実機で実行する。
+
+## 初回起動
+
+初回起動時、または設定が未入力の場合は接続設定画面が表示される。
+
+- **サーバーURL**: `bookmgr` サーバーのベースURL。エミュレータからホストマシンのlocalhostへ接続する場合は `http://10.0.2.2:8080` を使う。
+- **APIキー**: サーバーの `API_KEY` 環境変数と同じ値。
+
+設定は端末内（Jetpack DataStore）に保存される。
+
+## 構成
+
+```
+app/src/main/java/com/bookmgr/android/
+  MainActivity.kt
+  data/
+    model/          # API JSONのDTO（Book, BookInput, BookInfo等）
+    network/         # Retrofit + Moshi + OkHttp（X-API-Keyヘッダー付与）
+    BookRepository.kt   # APIクライアントのラッパー、エラーをApiExceptionに変換
+    settings/        # DataStoreによる接続設定の永続化
+  ui/
+    BookmgrApp.kt        # 設定要否の分岐
+    BookmgrNavHost.kt    # 画面遷移
+    BookListScreen.kt
+    BookDetailScreen.kt
+    BookFormScreen.kt    # 新規登録・編集（ISBN取得ボタン含む）
+    SettingsScreen.kt
+    theme/
+```
+
+## 既知の制約
+
+- このプロジェクトはAndroid SDK / Gradleのビルド環境がないサーバー側の開発環境で作成されたため、`./gradlew build` 等での実機ビルド確認は行えていない。Android Studioで開いた際にビルドエラーが出た場合は、依存バージョン（AGP 8.5.2 / Kotlin 1.9.24 / Compose BOM 2024.06.00 等、`app/build.gradle.kts` 参照）の調整が必要な可能性がある。
+- `gradle/wrapper/gradle-wrapper.jar`（バイナリ）は同梱していない。Android Studioで開けば自動的に補われる。
