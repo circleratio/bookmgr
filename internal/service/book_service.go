@@ -118,9 +118,8 @@ func validateInput(input BookInput) (*model.Book, error) {
 
 	isbn := normalizeOptional(input.ISBN)
 	if isbn != nil {
-		digits := strings.ReplaceAll(*isbn, "-", "")
-		if !isAllDigits(digits) || (len(digits) != 10 && len(digits) != 13) {
-			return nil, apperr.NewValidationError("isbn must be 10 or 13 digits (hyphens allowed)")
+		if !isValidISBN(strings.ReplaceAll(*isbn, "-", "")) {
+			return nil, apperr.NewValidationError("isbn must be 13 digits, or 10 digits with an optional trailing X check digit (hyphens allowed)")
 		}
 	}
 
@@ -173,4 +172,17 @@ func isAllDigits(s string) bool {
 		}
 	}
 	return true
+}
+
+// isValidISBN accepts a hyphen-stripped ISBN: 13 digits (ISBN-13), or 9
+// digits followed by a check digit that is a digit or "X"/"x" (ISBN-10).
+func isValidISBN(digits string) bool {
+	switch len(digits) {
+	case 13:
+		return isAllDigits(digits)
+	case 10:
+		return isAllDigits(digits[:9]) && (isAllDigits(digits[9:]) || digits[9] == 'X' || digits[9] == 'x')
+	default:
+		return false
+	}
 }

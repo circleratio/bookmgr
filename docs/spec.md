@@ -151,7 +151,7 @@ CREATE INDEX idx_books_author ON books(author);
 | author | 必須、1〜255文字 |
 | rating | 任意、1〜5の整数、未指定は`null` |
 | memo | 任意、最大2000文字 |
-| isbn | 任意、ハイフンを除いた数字10桁または13桁、DB上一意（重複時は`409 Conflict`） |
+| isbn | 任意、ハイフンを除いて13桁（ISBN-13、数字のみ）または10桁（ISBN-10、先頭9桁は数字・末尾1桁は数字または`X`/`x`のチェックデジット）、DB上一意（重複時は`409 Conflict`） |
 | publisher | 任意、最大255文字 |
 | published_date | 任意、`YYYY-MM-DD`形式 |
 
