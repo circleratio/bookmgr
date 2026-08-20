@@ -59,6 +59,30 @@ func TestISBNLookupService_Lookup_Success(t *testing.T) {
 	}
 }
 
+func TestISBNLookupService_Lookup_MergesFieldsAcrossMultipleItems(t *testing.T) {
+	// Reproduces a real Google Books quirk: a q=isbn:... search can return
+	// several candidate records for the same book, and the first one may be
+	// missing fields (e.g. publisher) that a later item has.
+	srv := newFakeGoogleBooksServer(t, http.StatusOK, `{
+		"items": [
+			{"volumeInfo": {"title": "吾輩は猫である", "authors": ["夏目漱石"]}},
+			{"volumeInfo": {"title": "吾輩は猫である", "authors": ["夏目漱石"], "publisher": "新潮社", "publishedDate": "2003-05-01"}}
+		]
+	}`)
+
+	svc := NewISBNLookupService("", srv.URL)
+	info, err := svc.Lookup(context.Background(), "9784101010359")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if info.Publisher != "新潮社" {
+		t.Errorf("publisher = %q, want %q (from second item)", info.Publisher, "新潮社")
+	}
+	if info.PublishedDate != "2003-05-01" {
+		t.Errorf("published_date = %q, want %q (from second item)", info.PublishedDate, "2003-05-01")
+	}
+}
+
 func TestISBNLookupService_Lookup_MultipleAuthorsJoined(t *testing.T) {
 	srv := newFakeGoogleBooksServer(t, http.StatusOK, `{
 		"items": [{"volumeInfo": {"title": "共著本", "authors": ["著者A", "著者B"]}}]

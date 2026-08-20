@@ -96,32 +96,52 @@ func (s *ISBNLookupService) Lookup(ctx context.Context, isbn string) (*BookInfo,
 		return nil, apperr.ErrNotFound
 	}
 
-	v := parsed.Items[0].VolumeInfo
-
+	// A q=isbn:... search can return several candidate records for the same
+	// book (e.g. from different regional catalogs), and the metadata each
+	// one carries is inconsistent — one may have title/authors but no
+	// publisher or date, while a later item does. Merge fields across all
+	// returned items instead of trusting items[0] alone, keeping the first
+	// non-empty value seen for each field.
+	info := &BookInfo{}
 	var isbn13, isbn10 string
-	for _, id := range v.IndustryIdentifiers {
-		switch id.Type {
-		case "ISBN_13":
-			isbn13 = id.Identifier
-		case "ISBN_10":
-			isbn10 = id.Identifier
+	for _, item := range parsed.Items {
+		v := item.VolumeInfo
+		if info.Title == "" && v.Title != "" {
+			info.Title = v.Title
+		}
+		if info.Author == "" && len(v.Authors) > 0 {
+			info.Author = strings.Join(v.Authors, ",")
+		}
+		if info.Publisher == "" && v.Publisher != "" {
+			info.Publisher = v.Publisher
+		}
+		if info.PublishedDate == "" && v.PublishedDate != "" {
+			info.PublishedDate = v.PublishedDate
+		}
+		for _, id := range v.IndustryIdentifiers {
+			switch id.Type {
+			case "ISBN_13":
+				if isbn13 == "" {
+					isbn13 = id.Identifier
+				}
+			case "ISBN_10":
+				if isbn10 == "" {
+					isbn10 = id.Identifier
+				}
+			}
 		}
 	}
-	resolvedISBN := normalized
+
+	info.PublishedDate = normalizePublishedDate(info.PublishedDate)
+	info.ISBN = normalized
 	switch {
 	case isbn13 != "":
-		resolvedISBN = isbn13
+		info.ISBN = isbn13
 	case isbn10 != "":
-		resolvedISBN = isbn10
+		info.ISBN = isbn10
 	}
 
-	return &BookInfo{
-		Title:         v.Title,
-		Author:        strings.Join(v.Authors, ","),
-		Publisher:     v.Publisher,
-		PublishedDate: normalizePublishedDate(v.PublishedDate),
-		ISBN:          resolvedISBN,
-	}, nil
+	return info, nil
 }
 
 // normalizePublishedDate pads a Google Books publishedDate (which may be a
