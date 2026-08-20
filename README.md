@@ -17,6 +17,18 @@ go run ./cmd/server
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
 
+## ビルド
+
+```sh
+go build -o bookmgr ./cmd/server
+```
+
+`bookmgr` バイナリが生成される。実行方法は起動方法と同様に環境変数を設定してから起動する。
+
+```sh
+API_KEY=your-secret-key ./bookmgr
+```
+
 ## テスト
 
 ```sh
