@@ -5,9 +5,10 @@
 ## 起動方法
 
 ```sh
-export API_KEY=your-secret-key   # 必須
-export PORT=8080                 # 任意（デフォルト 8080）
-export DB_PATH=db/bookmgr.db     # 任意（デフォルト db/bookmgr.db）
+export API_KEY=your-secret-key       # 必須
+export PORT=8080                     # 任意（デフォルト 8080）
+export DB_PATH=db/bookmgr.db         # 任意（デフォルト db/bookmgr.db）
+export GOOGLE_BOOKS_API_KEY=...      # 任意（新規登録画面のISBN取得機能で使用。未設定でも動作する）
 
 go run ./cmd/server
 ```
@@ -16,6 +17,7 @@ go run ./cmd/server
 
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
+- 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
 
 ## ビルド
 

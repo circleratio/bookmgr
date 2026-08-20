@@ -37,6 +37,7 @@ func main() {
 
 	bookRepo := repository.NewBookRepository(db)
 	bookService := service.NewBookService(bookRepo)
+	isbnLookupService := service.NewISBNLookupService(os.Getenv("GOOGLE_BOOKS_API_KEY"), "")
 
 	renderer, err := webhandler.NewRenderer("templates")
 	if err != nil {
@@ -51,7 +52,7 @@ func main() {
 
 	webAuthorized := r.Group("/")
 	webAuthorized.Use(middleware.WebAuth(apiKey))
-	webhandler.NewBookHandler(bookService, renderer).Register(webAuthorized)
+	webhandler.NewBookHandler(bookService, isbnLookupService, renderer).Register(webAuthorized)
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(middleware.APIKeyAuth(apiKey))

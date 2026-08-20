@@ -13,11 +13,12 @@ import (
 
 type BookHandler struct {
 	service  *service.BookService
+	lookup   *service.ISBNLookupService
 	renderer *Renderer
 }
 
-func NewBookHandler(service *service.BookService, renderer *Renderer) *BookHandler {
-	return &BookHandler{service: service, renderer: renderer}
+func NewBookHandler(service *service.BookService, lookup *service.ISBNLookupService, renderer *Renderer) *BookHandler {
+	return &BookHandler{service: service, lookup: lookup, renderer: renderer}
 }
 
 func (h *BookHandler) Register(r gin.IRouter) {
@@ -27,6 +28,26 @@ func (h *BookHandler) Register(r gin.IRouter) {
 	r.GET("/books/:id/edit", h.EditForm)
 	r.POST("/books/:id", h.Update)
 	r.POST("/books/:id/delete", h.Delete)
+	r.GET("/books/isbn-lookup", h.ISBNLookup)
+}
+
+func (h *BookHandler) ISBNLookup(c *gin.Context) {
+	info, err := h.lookup.Lookup(c.Request.Context(), c.Query("isbn"))
+	if err != nil {
+		status := http.StatusBadGateway
+		message := "書誌情報の取得に失敗しました"
+		switch {
+		case errors.Is(err, apperr.ErrValidation):
+			status = http.StatusBadRequest
+			message = err.Error()
+		case errors.Is(err, apperr.ErrNotFound):
+			status = http.StatusNotFound
+			message = "該当する書籍が見つかりませんでした"
+		}
+		c.JSON(status, gin.H{"error": message})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": info})
 }
 
 func (h *BookHandler) List(c *gin.Context) {

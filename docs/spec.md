@@ -178,13 +178,24 @@ CREATE INDEX idx_books_author ON books(author);
 | GET | /books/:id/edit | 編集フォーム |
 | POST | /books/:id | 更新処理 |
 | POST | /books/:id/delete | 削除処理 |
+| GET | /books/isbn-lookup | ISBNから書誌情報を取得（JSON、新規登録フォームからのAJAX用） |
 
 - 一覧画面は `GET /api/books` と同じクエリパラメータ（`q`, `page`）をURLクエリとして受け取り、検索状態を維持する。
 - HTMLフォームは`PUT`/`DELETE`を送れないため、更新・削除は`POST`で統一する。
 - フォームのバリデーションエラーはAPI層と同じルールを再利用し、入力値を保持したまま画面を再表示する。
 
+# ISBN検索（Google Books API連携）
+
+- 新規登録フォームにISBN入力欄と「取得」ボタンを設け、クリック時にブラウザから `GET /books/isbn-lookup?isbn=...` へfetchする（Cookieセッションで認証済みの画面用エンドポイントであり、`/api/*`とは別。`/api/*`はヘッダー認証のためブラウザJSから直接呼べないことによる）。
+- サーバー側は `internal/service` にある `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出し、最初の検索結果から 書名・著者（複数著者は`,`区切りで連結）・出版社・出版日・ISBN（`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値）を取得する。
+- 取得成功時: `200 { "data": { "title", "author", "publisher", "published_date", "isbn" } }`。フロントエンドJSが該当フォーム項目（書名・著者・出版社・出版日・ISBN）に反映する。評価・メモはGoogle Books側に無いため対象外。
+- 該当書籍が見つからない場合: `404 { "error": "..." }`。
+- APIキー未指定・不正な場合や外部API呼び出し失敗時: `400`/`502` 相当のエラーJSON。
+- Google BooksのAPIキー（`GOOGLE_BOOKS_API_KEY`）は任意。設定時のみクエリパラメータ`key`として付与する（未設定でも動作する）。
+- `publishedDate`が年のみ（`YYYY`）や年月のみ（`YYYY-MM`）の場合は、フォームの`date`入力欄に収まるよう`-01-01`/`-01`を補って`YYYY-MM-DD`に正規化する。
+
 # 非機能
 
 - テスト: `internal/service`, `internal/repository` を中心にユニットテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
-- 設定: `API_KEY`, `PORT`, `DB_PATH` を環境変数で受け取る。
+- 設定: `API_KEY`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）を環境変数で受け取る。
