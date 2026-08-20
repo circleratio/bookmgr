@@ -1,0 +1,22 @@
+{{define "login"}}
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ログイン - 蔵書管理</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="container login-page">
+  <h1>蔵書管理</h1>
+  <form action="/login" method="post" class="card">
+    {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+    <label for="api_key">APIキー</label>
+    <input type="password" id="api_key" name="api_key" required autofocus>
+    <button type="submit">ログイン</button>
+  </form>
+</main>
+</body>
+</html>
+{{end}}

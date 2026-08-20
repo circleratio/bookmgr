@@ -1,0 +1,5 @@
+/db/bookmgr.db
+/db/bookmgr.db-*
+/bookmgr
+/tmp/
+*.test

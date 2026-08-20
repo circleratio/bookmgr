@@ -1,0 +1,53 @@
+{{define "content"}}
+<div class="page-header">
+  <h1>蔵書一覧</h1>
+  <a class="button" href="/books/new">+ 新規登録</a>
+</div>
+
+{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+
+<form action="/" method="get" class="search-form">
+  <input type="text" name="q" value="{{.Query}}" placeholder="書名・著者で検索">
+  <button type="submit">検索</button>
+</form>
+
+<p class="result-count">{{.Total}} 件</p>
+
+<table class="book-table">
+  <thead>
+    <tr>
+      <th>書名</th>
+      <th>著者</th>
+      <th>評価</th>
+      <th>出版社</th>
+      <th>出版日</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Books}}
+    <tr>
+      <td>{{.Title}}</td>
+      <td>{{.Author}}</td>
+      <td>{{stars .Rating}}</td>
+      <td>{{orDash .Publisher}}</td>
+      <td>{{orDash .PublishedDate}}</td>
+      <td class="actions">
+        <a href="/books/{{.ID}}/edit">編集</a>
+        <form action="/books/{{.ID}}/delete" method="post" onsubmit="return confirm('削除しますか?');">
+          <button type="submit" class="link-button">削除</button>
+        </form>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="6">該当する書籍がありません</td></tr>
+    {{end}}
+  </tbody>
+</table>
+
+<nav class="pagination">
+  {{if gt .Page 1}}<a href="/?q={{.Query}}&page={{sub .Page 1}}">前へ</a>{{end}}
+  <span>{{.Page}} / {{.TotalPages}}</span>
+  {{if lt .Page .TotalPages}}<a href="/?q={{.Query}}&page={{add .Page 1}}">次へ</a>{{end}}
+</nav>
+{{end}}
