@@ -8,7 +8,7 @@
 - REST API（`/api/*`）とサーバーサイドレンダリング画面（それ以外）を同一プロセスで提供する。
 - 画面ハンドラ（SSR）はHTTP経由でAPIを呼び出さず、サービス層を直接呼び出す。
 - DBはsqlite3。標準ライブラリの`sqlite3`モジュールを生SQLのまま使用する（ORMは使わない）。単一コネクションを`threading.Lock`でシリアライズし、sqlite3が並行書き込みに対応しない点をGo版（`db.SetMaxOpenConns(1)`）と同様に扱う。マイグレーションはSQLファイルを起動時に適用する簡易方式とする。
-- CLIクライアント（`cmd/cli`）は元々サーバーのHTTP APIのみに依存しているため、Go実装のまま変更していない。
+- CLIクライアント（`cli/`）もPython製。サーバーのHTTP/JSON API（`/api/*`）のみに依存し、サーバー内部実装（`server/app/`）には依存しない。
 
 # ディレクトリ構成
 
@@ -36,11 +36,12 @@ server/
   static/                  # CSS等の静的ファイル
   tests/                   # pytest
   requirements.txt
-cmd/
-  cli/
-    main.go               # CLIクライアントのエントリポイント（Go、変更なし）
-internal/
-  apiclient/               # REST APIを呼び出すGoクライアント（cmd/cliが利用、変更なし）
+cli/
+  bookmgr_cli/
+    main.py                # エントリポイント、argparseによるサブコマンド定義
+    client.py              # REST APIを呼び出すHTTPクライアント（httpx使用）
+  tests/                   # pytest
+  requirements.txt
 db/
   migrations/              # DDL（SQLファイル、Go/Python両実装で共有）
   bookmgr.db               # sqlite3ファイル（実行時生成、.gitignore対象）
@@ -51,7 +52,7 @@ docs/
   plan.md
 ```
 
-サーバー（`server/`）とCLI（`cmd/cli`, `internal/apiclient`）は同じリポジトリ内に同居するが、言語・依存関係は完全に独立している。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用するため、サーバーをGoからPythonへ移行してもCLI側の変更は不要だった。Androidも同様にHTTP/JSON APIのみに依存するため無改修。旧Go実装のサーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）は移行完了に伴い削除済み。
+サーバー（`server/`）とCLI（`cli/`）は同じリポジトリ内に同居するが、それぞれ独立したPython環境（venv・`requirements.txt`）を持つ。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用する。Androidも同様にHTTP/JSON APIのみに依存する。旧Go実装（`cmd/server`, `cmd/cli`, `internal/`）は移行完了に伴いすべて削除済み。
 
 # DB設計
 
@@ -227,7 +228,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 # CLIクライアント
 
-- `cmd/cli` に実装するGo製CLI。`internal/apiclient` の共通HTTPクライアント（`/api/*`を`X-API-Key`ヘッダー認証で呼び出す）を使う。
+- `cli/bookmgr_cli` に実装するPython製CLI（`argparse`でサブコマンドを定義、`client.py` が `/api/*` を `X-API-Key` ヘッダー認証で呼び出す）。
 - 接続設定は環境変数で受け取る: `BOOKMGR_API_URL`（例: `http://localhost:8080`）, `BOOKMGR_API_KEY`（必須）。
 - サブコマンド:
   | コマンド | 説明 |
@@ -242,7 +243,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 # Androidクライアント
 
-- `android/` に独立したGradle/Kotlinプロジェクトとして実装する（ルートのGoモジュール（CLI用）やPythonサーバーには含めない）。
+- `android/` に独立したGradle/Kotlinプロジェクトとして実装する（`server/`, `cli/`のPythonプロジェクトには含めない）。
 - UI: Jetpack Compose + Material3。画面遷移はNavigation Compose。
 - 機能はWeb版と同等: 設定（サーバーURL・APIキー入力、端末内に保存）、一覧・検索（ページング）、詳細表示、新規登録・編集・削除、ISBN入力による書誌情報取得（`GET /api/isbn-lookup`）。
 - 通信: `/api/*` を `X-API-Key` ヘッダー認証で直接呼び出す（Web版と異なりCookieを使わないため、サーバー側の変更は不要）。
@@ -251,6 +252,6 @@ CREATE INDEX idx_books_author ON books(author);
 
 # 非機能
 
-- テスト: `server/tests`（pytest）を中心にユニットテスト・ハンドラテストを整備する。CLI（Go）側は `internal/apiclient` のテストを維持する。
+- テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
 - 設定: `API_KEY`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）を環境変数で受け取る。

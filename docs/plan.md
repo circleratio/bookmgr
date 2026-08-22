@@ -1,6 +1,6 @@
-# 実装計画（Python/FastAPI移行）
+# 実装計画（Python移行）
 
-`docs/spec.md` の設計に基づく、サーバー実装のGo/GinからPython/FastAPIへの移行手順。CLIクライアント（`cmd/cli`, `internal/apiclient`）とAndroidアプリはHTTP/JSON APIのみに依存するため対象外（無改修）。
+`docs/spec.md` の設計に基づく、サーバー（Go/Gin）・CLIクライアント（Go）のPythonへの移行手順。Androidアプリのみ、HTTP/JSON APIのみに依存するため対象外（無改修）。
 
 # 使用ライブラリ
 
@@ -61,8 +61,21 @@
 - [x] 手動でサーバーを起動し、curlでログイン→一覧→登録→編集→削除、ISBN検索（API・Web両方）、認証エラー・バリデーションエラーの表示を確認
 - [x] READMEの起動方法をPython版（`server/` + venv + `python -m app.main`）に更新
 - [x] `docs/requirement.md` / `docs/spec.md` の技術スタック・アーキテクチャ記述をPython/FastAPIに更新
-- [x] 動作確認完了後、旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）を削除（CLIが使う `internal/apiclient`, `cmd/cli` は対象外）。`internal/apiclient` のテストがサーバー側パッケージ（gin/service/repository）に依存していたため、サーバー実装を使わない自前の疑似HTTPサーバーに書き換えた上で削除した
+- [x] 動作確認完了後、旧Go実装のサーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware,apperr}`）を削除。CLI（`cmd/cli`, `internal/apiclient`）は当時まだGoのまま残していたため対象外とした
+
+# フェーズ8: CLIクライアントのPython移行
+
+- [x] `cli/` ディレクトリ作成、`requirements.txt`（httpx, pytest）作成
+- [x] `cli/bookmgr_cli/client.py`: `internal/apiclient` のGoクライアントを1対1で移植（`X-API-Key`ヘッダー認証、`{"error":{"code","message"}}` を `APIError` に変換）
+- [x] `cli/bookmgr_cli/main.py`: Go版の `flag` パッケージによるサブコマンド構成を `argparse` に置き換え。テーブル出力・JSON出力（インデント2・非ASCIIエスケープなし）、更新時に未指定の任意項目がクリアされる挙動（部分更新ではなく全置換）も含めてGo版と同じ振る舞いに揃えた
+- [x] Windows環境で標準出力の既定エンコーディングにより日本語が文字化けする問題に対応し、`main()` 内で `sys.stdout`/`sys.stderr` を明示的にUTF-8に固定
+- [x] `cli/tests/test_client.py`: Go版 `client_test.go` の全ケースを移植。`httptest.Server` の代わりに `httpx.MockTransport` で疑似サーバーを表現
+- [x] 手動でFastAPIサーバーを起動し、全サブコマンド（list/get/create/update/delete/isbn-lookup）と認証エラー・404エラーの経路をCLI経由で確認
+- [x] READMEのCLI起動方法をPython版（`cli/` + venv + `python -m bookmgr_cli`）に更新
+- [x] 動作確認完了後、旧Go実装（`cmd/cli`, `internal/apiclient`）を削除。他に参照元がなくなったため、ルートの `go.mod` / `go.sum` も削除しGoツールチェーンへの依存を完全に終了
 
 # 実装順序の理由
 
 Go版のレイヤー構成（repository → service → handler）をそのまま踏襲し、同じ順序でPythonに移植した。ルーティング・JSON形状・エラーコードといった外部契約を一切変えないことを最優先し、各層でGo版の既存テストケースをpytestに1対1で移植することで、移行によるデグレードがないことを機械的に検証できるようにした。認証は API/Web どちらの層にも影響するため、両ハンドラの実装と並行して組み込んだ。SSR画面はテンプレートエンジンの書き方自体が変わる（Goのテンプレート合成 → Jinja2の継承）ため最後に着手し、先に固めたサービス層をそのまま再利用することで画面側の実装量を抑えた。
+
+CLIクライアントはサーバーのHTTP/JSON API契約のみに依存しており、サーバー実装の言語に非依存だったため、サーバー移行が完全に完了・削除された後に独立してPython化した。サーバー同様、「新実装＋テスト移植 → 手動動作確認 → 旧Go実装削除」の順で進め、各段階で動作確認を挟んでからでないと前の実装を消さない、という進め方をサーバー・CLIの両方で一貫させた。
