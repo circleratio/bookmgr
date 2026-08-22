@@ -1,16 +1,23 @@
 # bookmgr
 
-蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Gin で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照。
+蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Python/FastAPI（`server/`）で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照（これらはGo実装当時の設計書だが、DB設計・API仕様・画面仕様はPython版でも変更していない）。
+
+> 元はGo/Ginで実装していたが、Python/FastAPIへ移行した。Go実装（`cmd/server`, `internal/`）は動作確認用に一時的に残しており、CLIクライアント（`cmd/cli`）とは無関係に後日削除する予定。
 
 ## 起動方法
 
 ```sh
+cd server
+python -m venv .venv
+.venv\Scripts\activate          # Windows。macOS/Linuxは `source .venv/bin/activate`
+pip install -r requirements.txt
+
 export API_KEY=your-secret-key       # 必須
 export PORT=8080                     # 任意（デフォルト 8080）
-export DB_PATH=db/bookmgr.db         # 任意（デフォルト db/bookmgr.db）
+export DB_PATH=db/bookmgr.db         # 任意（デフォルト db/bookmgr.db、リポジトリルート基準）
 export GOOGLE_BOOKS_API_KEY=...      # 任意（新規登録画面のISBN取得機能で使用。未設定でも動作する）
 
-go run ./cmd/server
+python -m app.main
 ```
 
 起動時に `db/migrations/` 配下のSQLが自動適用される（`CREATE TABLE/INDEX IF NOT EXISTS` のため複数回実行しても安全）。
@@ -18,18 +25,6 @@ go run ./cmd/server
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
 - 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
-
-## ビルド
-
-```sh
-go build -o bookmgr ./cmd/server
-```
-
-`bookmgr` バイナリが生成される。実行方法は起動方法と同様に環境変数を設定してから起動する。
-
-```sh
-API_KEY=your-secret-key ./bookmgr
-```
 
 ## CLIクライアント
 
@@ -54,6 +49,13 @@ export BOOKMGR_API_KEY=your-secret-key         # 必須（サーバーの API_KE
 ## テスト
 
 ```sh
-go test ./...
+cd server
+pytest
+```
+
+CLIクライアント（Go）側のテストは従来通り:
+
+```sh
+go test ./internal/apiclient/...
 ```
 
