@@ -2,7 +2,7 @@
 
 蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Python/FastAPI（`server/`）で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照（これらはGo実装当時の設計書だが、DB設計・API仕様・画面仕様はPython版でも変更していない）。
 
-> 元はGo/Ginで実装していたが、Python/FastAPIへ移行した。Go実装（`cmd/server`, `internal/`）は動作確認用に一時的に残しており、CLIクライアント（`cmd/cli`）とは無関係に後日削除する予定。
+> 元はGo/Ginで実装していたが、Python/FastAPIへ移行した。旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）は削除済み。CLIクライアント（`cmd/cli`, `internal/apiclient`）は元々HTTP APIのみに依存していたため、Go実装のまま変更していない。
 
 ## 起動方法
 

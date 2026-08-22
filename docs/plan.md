@@ -61,7 +61,7 @@
 - [x] 手動でサーバーを起動し、curlでログイン→一覧→登録→編集→削除、ISBN検索（API・Web両方）、認証エラー・バリデーションエラーの表示を確認
 - [x] READMEの起動方法をPython版（`server/` + venv + `python -m app.main`）に更新
 - [x] `docs/requirement.md` / `docs/spec.md` の技術スタック・アーキテクチャ記述をPython/FastAPIに更新
-- [ ] 動作確認完了後、旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）を削除する（CLIが使う `internal/apiclient`, `cmd/cli` は対象外）
+- [x] 動作確認完了後、旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）を削除（CLIが使う `internal/apiclient`, `cmd/cli` は対象外）。`internal/apiclient` のテストがサーバー側パッケージ（gin/service/repository）に依存していたため、サーバー実装を使わない自前の疑似HTTPサーバーに書き換えた上で削除した
 
 # 実装順序の理由
 

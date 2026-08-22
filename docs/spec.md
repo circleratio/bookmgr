@@ -41,8 +41,6 @@ cmd/
     main.go               # CLIクライアントのエントリポイント（Go、変更なし）
 internal/
   apiclient/               # REST APIを呼び出すGoクライアント（cmd/cliが利用、変更なし）
-  model/, repository/, service/, handler/, middleware/
-                            # 旧Go実装のサーバー。移行元として動作確認用に残しており、削除予定
 db/
   migrations/              # DDL（SQLファイル、Go/Python両実装で共有）
   bookmgr.db               # sqlite3ファイル（実行時生成、.gitignore対象）
@@ -53,7 +51,7 @@ docs/
   plan.md
 ```
 
-サーバー（`server/`）とCLI（`cmd/cli`, `internal/apiclient`）は同じリポジトリ内に同居するが、言語・依存関係は完全に独立している。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用するため、サーバーをGoからPythonへ移行してもCLI側の変更は不要だった。Androidも同様にHTTP/JSON APIのみに依存するため無改修。
+サーバー（`server/`）とCLI（`cmd/cli`, `internal/apiclient`）は同じリポジトリ内に同居するが、言語・依存関係は完全に独立している。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用するため、サーバーをGoからPythonへ移行してもCLI側の変更は不要だった。Androidも同様にHTTP/JSON APIのみに依存するため無改修。旧Go実装のサーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）は移行完了に伴い削除済み。
 
 # DB設計
 
