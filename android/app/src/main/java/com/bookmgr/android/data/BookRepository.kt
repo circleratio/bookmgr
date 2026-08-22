@@ -18,6 +18,13 @@ class BookRepository(private val api: ApiService) {
 
     suspend fun get(id: Long): Book = unwrap(api.getBook(id)).data
 
+    /** Returns the registered book for [isbn], or null if no book has that ISBN yet. */
+    suspend fun findByIsbn(isbn: String): Book? {
+        val response = api.getBookByIsbn(isbn)
+        if (response.code() == 404) return null
+        return unwrap(response).data
+    }
+
     suspend fun create(input: BookInput): Book = unwrap(api.createBook(input)).data
 
     suspend fun update(id: Long, input: BookInput): Book = unwrap(api.updateBook(id, input)).data

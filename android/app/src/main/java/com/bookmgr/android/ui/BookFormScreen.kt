@@ -39,6 +39,7 @@ fun BookFormScreen(
     repository: BookRepository,
     onSaved: () -> Unit,
     onCancel: () -> Unit,
+    initialIsbn: String? = null,
 ) {
     var title by remember { mutableStateOf("") }
     var author by remember { mutableStateOf("") }
@@ -54,7 +55,25 @@ fun BookFormScreen(
     val scope = rememberCoroutineScope()
     val isNew = bookId == null
 
-    LaunchedEffect(bookId) {
+    suspend fun lookupIsbn(value: String) {
+        looking = true
+        lookupMessage = null
+        try {
+            val info = repository.isbnLookup(value)
+            if (info.title.isNotBlank()) title = info.title
+            if (info.author.isNotBlank()) author = info.author
+            if (info.publisher.isNotBlank()) publisher = info.publisher
+            if (info.publishedDate.isNotBlank()) publishedDate = info.publishedDate
+            if (info.isbn.isNotBlank()) isbn = info.isbn
+            lookupMessage = "取得しました"
+        } catch (e: Exception) {
+            lookupMessage = e.message ?: "取得に失敗しました"
+        } finally {
+            looking = false
+        }
+    }
+
+    LaunchedEffect(bookId, initialIsbn) {
         if (bookId != null) {
             try {
                 val b = repository.get(bookId)
@@ -68,6 +87,11 @@ fun BookFormScreen(
             } catch (e: Exception) {
                 errorMessage = e.message
             }
+        } else if (!initialIsbn.isNullOrBlank()) {
+            // Pre-fill from a scanned barcode: show the ISBN immediately and
+            // fetch the rest of the book info in the background.
+            isbn = initialIsbn
+            lookupIsbn(initialIsbn)
         }
     }
 
@@ -102,25 +126,7 @@ fun BookFormScreen(
                 if (isNew) {
                     Spacer(Modifier.width(8.dp))
                     Button(
-                        onClick = {
-                            scope.launch {
-                                looking = true
-                                lookupMessage = null
-                                try {
-                                    val info = repository.isbnLookup(isbn)
-                                    if (info.title.isNotBlank()) title = info.title
-                                    if (info.author.isNotBlank()) author = info.author
-                                    if (info.publisher.isNotBlank()) publisher = info.publisher
-                                    if (info.publishedDate.isNotBlank()) publishedDate = info.publishedDate
-                                    if (info.isbn.isNotBlank()) isbn = info.isbn
-                                    lookupMessage = "取得しました"
-                                } catch (e: Exception) {
-                                    lookupMessage = e.message ?: "取得に失敗しました"
-                                } finally {
-                                    looking = false
-                                }
-                            }
-                        },
+                        onClick = { scope.launch { lookupIsbn(isbn) } },
                         enabled = isbn.isNotBlank() && !looking,
                     ) { Text(if (looking) "取得中..." else "取得") }
                 }

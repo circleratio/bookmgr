@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	sqlite "modernc.org/sqlite"
 	sqlite3lib "modernc.org/sqlite/lib"
@@ -16,6 +17,7 @@ import (
 type BookRepository interface {
 	List(ctx context.Context, query string, page, pageSize int) ([]model.Book, int, error)
 	FindByID(ctx context.Context, id int64) (*model.Book, error)
+	FindByISBN(ctx context.Context, isbn string) (*model.Book, error)
 	Create(ctx context.Context, book *model.Book) error
 	Update(ctx context.Context, book *model.Book) error
 	Delete(ctx context.Context, id int64) error
@@ -80,6 +82,25 @@ func (r *bookRepository) FindByID(ctx context.Context, id int64) (*model.Book, e
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find book: %w", err)
+	}
+	return b, nil
+}
+
+// FindByISBN looks up a book by ISBN, ignoring hyphens on both sides so a
+// scanned barcode (digits only) still matches an ISBN stored with hyphens.
+func (r *bookRepository) FindByISBN(ctx context.Context, isbn string) (*model.Book, error) {
+	normalized := strings.ReplaceAll(isbn, "-", "")
+	row := r.db.QueryRowContext(ctx,
+		`SELECT id, title, author, rating, memo, isbn, publisher, published_date, created_at, updated_at
+		 FROM books WHERE REPLACE(isbn, '-', '') = ?`,
+		normalized,
+	)
+	b, err := scanBook(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, apperr.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find book by isbn: %w", err)
 	}
 	return b, nil
 }

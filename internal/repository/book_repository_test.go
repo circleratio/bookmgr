@@ -64,6 +64,37 @@ func TestBookRepository_FindByID_NotFound(t *testing.T) {
 	}
 }
 
+func TestBookRepository_FindByISBN(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewBookRepository(db)
+	ctx := context.Background()
+
+	book := &model.Book{Title: "吾輩は猫である", Author: "夏目漱石", ISBN: strPtr("978-4-10-101035-9")}
+	if err := repo.Create(ctx, book); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Scanned barcodes are hyphen-free digits; lookup should still match a
+	// hyphenated ISBN stored via manual entry.
+	found, err := repo.FindByISBN(ctx, "9784101010359")
+	if err != nil {
+		t.Fatalf("find by isbn: %v", err)
+	}
+	if found.ID != book.ID {
+		t.Errorf("id = %d, want %d", found.ID, book.ID)
+	}
+}
+
+func TestBookRepository_FindByISBN_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	repo := NewBookRepository(db)
+
+	_, err := repo.FindByISBN(context.Background(), "9784101010359")
+	if !errors.Is(err, apperr.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestBookRepository_Create_DuplicateISBN(t *testing.T) {
 	db := setupTestDB(t)
 	repo := NewBookRepository(db)

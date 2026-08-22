@@ -63,6 +63,14 @@ func (s *BookService) Get(ctx context.Context, id int64) (*model.Book, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
+func (s *BookService) GetByISBN(ctx context.Context, isbn string) (*model.Book, error) {
+	isbn = strings.TrimSpace(isbn)
+	if isbn == "" {
+		return nil, apperr.NewValidationError("isbn is required")
+	}
+	return s.repo.FindByISBN(ctx, isbn)
+}
+
 func (s *BookService) Create(ctx context.Context, input BookInput) (*model.Book, error) {
 	book, err := validateInput(input)
 	if err != nil {

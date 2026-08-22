@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -31,6 +32,9 @@ func (h *ISBNLookupHandler) Lookup(c *gin.Context) {
 		case errors.Is(err, apperr.ErrNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": "NOT_FOUND", "message": "no book found for isbn"}})
 		default:
+			// The client-facing message is intentionally generic; log the
+			// underlying cause (e.g. upstream rate limiting) for diagnosis.
+			log.Printf("isbn lookup failed: isbn=%q err=%v", c.Query("isbn"), err)
 			c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"code": "UPSTREAM_ERROR", "message": "failed to fetch book info"}})
 		}
 		return

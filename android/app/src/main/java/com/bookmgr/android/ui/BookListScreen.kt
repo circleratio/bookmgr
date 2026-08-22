@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +53,7 @@ fun BookListScreen(
     onOpenBook: (Long) -> Unit,
     onCreateNew: () -> Unit,
     onOpenSettings: () -> Unit,
+    onScan: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var page by remember { mutableIntStateOf(1) }
@@ -82,6 +84,9 @@ fun BookListScreen(
             TopAppBar(
                 title = { Text("蔵書一覧") },
                 actions = {
+                    IconButton(onClick = onScan) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "カメラ")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "設定")
                     }

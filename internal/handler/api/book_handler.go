@@ -19,6 +19,7 @@ func NewBookHandler(service *service.BookService) *BookHandler {
 
 func (h *BookHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/books", h.List)
+	rg.GET("/books/by-isbn/:isbn", h.GetByISBN)
 	rg.GET("/books/:id", h.Get)
 	rg.POST("/books", h.Create)
 	rg.PUT("/books/:id", h.Update)
@@ -67,6 +68,15 @@ func (h *BookHandler) Get(c *gin.Context) {
 		return
 	}
 	book, err := h.service.Get(c.Request.Context(), id)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	respondData(c, http.StatusOK, book)
+}
+
+func (h *BookHandler) GetByISBN(c *gin.Context) {
+	book, err := h.service.GetByISBN(c.Request.Context(), c.Param("isbn"))
 	if err != nil {
 		respondError(c, err)
 		return

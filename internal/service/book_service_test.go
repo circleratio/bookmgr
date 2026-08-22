@@ -34,6 +34,15 @@ func (r *fakeRepo) FindByID(ctx context.Context, id int64) (*model.Book, error) 
 	return b, nil
 }
 
+func (r *fakeRepo) FindByISBN(ctx context.Context, isbn string) (*model.Book, error) {
+	for _, b := range r.books {
+		if b.ISBN != nil && *b.ISBN == isbn {
+			return b, nil
+		}
+	}
+	return nil, apperr.ErrNotFound
+}
+
 func (r *fakeRepo) Create(ctx context.Context, book *model.Book) error {
 	for _, b := range r.books {
 		if book.ISBN != nil && b.ISBN != nil && *b.ISBN == *book.ISBN {

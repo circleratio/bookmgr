@@ -22,6 +22,23 @@ fun BookmgrNavHost(
                 onOpenBook = { id -> navController.navigate("detail/$id") },
                 onCreateNew = { navController.navigate("form/new") },
                 onOpenSettings = { navController.navigate("settings") },
+                onScan = { navController.navigate("scan") },
+            )
+        }
+        composable("scan") {
+            BarcodeScanScreen(
+                repository = repository,
+                onBack = { navController.popBackStack() },
+                onUnregistered = { isbn ->
+                    navController.navigate("form/new?isbn=$isbn") {
+                        popUpTo("scan") { inclusive = true }
+                    }
+                },
+                onOpenBook = { id ->
+                    navController.navigate("detail/$id") {
+                        popUpTo("scan") { inclusive = true }
+                    }
+                },
             )
         }
         composable(
@@ -37,9 +54,13 @@ fun BookmgrNavHost(
                 onBack = { navController.popBackStack() },
             )
         }
-        composable("form/new") {
+        composable(
+            "form/new?isbn={isbn}",
+            arguments = listOf(navArgument("isbn") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { backStackEntry ->
             BookFormScreen(
                 bookId = null,
+                initialIsbn = backStackEntry.arguments?.getString("isbn"),
                 repository = repository,
                 onSaved = { navController.popBackStack() },
                 onCancel = { navController.popBackStack() },

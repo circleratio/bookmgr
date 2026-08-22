@@ -25,6 +25,9 @@ interface ApiService {
     @GET("/api/books/{id}")
     suspend fun getBook(@Path("id") id: Long): Response<DataResponse<Book>>
 
+    @GET("/api/books/by-isbn/{isbn}")
+    suspend fun getBookByIsbn(@Path("isbn") isbn: String): Response<DataResponse<Book>>
+
     @POST("/api/books")
     suspend fun createBook(@Body input: BookInput): Response<DataResponse<Book>>
 

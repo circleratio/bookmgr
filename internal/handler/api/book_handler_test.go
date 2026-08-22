@@ -122,6 +122,25 @@ func TestAPI_Create_ConflictISBN(t *testing.T) {
 	}
 }
 
+func TestAPI_GetByISBN(t *testing.T) {
+	r := setupRouter(t)
+	body := map[string]any{"title": "A", "author": "X", "isbn": "978-4-10-101035-9"}
+	doRequest(r, http.MethodPost, "/api/books", body, true)
+
+	w := doRequest(r, http.MethodGet, "/api/books/by-isbn/9784101010359", nil, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPI_GetByISBN_NotFound(t *testing.T) {
+	r := setupRouter(t)
+	w := doRequest(r, http.MethodGet, "/api/books/by-isbn/9784101010359", nil, true)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404, body=%s", w.Code, w.Body.String())
+	}
+}
+
 func TestAPI_List_SearchAndPagination(t *testing.T) {
 	r := setupRouter(t)
 	for _, title := range []string{"吾輩は猫である", "坊っちゃん", "人間失格"} {

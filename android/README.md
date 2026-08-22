@@ -2,7 +2,7 @@
 
 `bookmgr` サーバーのREST API（`/api/*`）を操作するAndroidアプリ。Jetpack Compose + Material3。
 
-機能はWeb版と同等: 一覧・検索・ページング、詳細表示、新規登録・編集・削除、ISBN入力によるGoogle Books書誌情報取得。
+機能はWeb版と同等: 一覧・検索・ページング、詳細表示、新規登録・編集・削除、ISBN入力によるGoogle Books書誌情報取得に加えて、カメラでバーコード（ISBN）を撮影しての登録状況確認・新規登録画面への自動入力。
 
 ## セットアップ
 
@@ -52,6 +52,7 @@ app/src/main/java/com/bookmgr/android/
     BookListScreen.kt
     BookDetailScreen.kt
     BookFormScreen.kt    # 新規登録・編集（ISBN取得ボタン含む）
+    BarcodeScanScreen.kt # カメラでISBNバーコードを撮影して登録状況を確認
     SettingsScreen.kt
     theme/
 ```
