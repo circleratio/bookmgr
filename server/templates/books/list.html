@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="page-header">
+  <h1>蔵書一覧</h1>
+  <a class="button" href="/books/new">+ 新規登録</a>
+</div>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form action="/" method="get" class="search-form">
+  <input type="text" name="q" value="{{ query }}" placeholder="書名・著者で検索">
+  <button type="submit">検索</button>
+</form>
+
+<p class="result-count">{{ total }} 件</p>
+
+<table class="book-table">
+  <thead>
+    <tr>
+      <th>書名</th>
+      <th>著者</th>
+      <th>評価</th>
+      <th>出版社</th>
+      <th>出版日</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for book in books %}
+    <tr>
+      <td>{{ book.title }}</td>
+      <td>{{ book.author }}</td>
+      <td>{{ stars(book.rating) }}</td>
+      <td>{{ book.publisher or "-" }}</td>
+      <td>{{ book.published_date or "-" }}</td>
+      <td class="actions">
+        <a href="/books/{{ book.id }}/edit">編集</a>
+        <form action="/books/{{ book.id }}/delete" method="post" onsubmit="return confirm('削除しますか?');">
+          <button type="submit" class="link-button">削除</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">該当する書籍がありません</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<nav class="pagination">
+  {% if page > 1 %}<a href="/?q={{ query }}&page={{ page - 1 }}">前へ</a>{% endif %}
+  <span>{{ page }} / {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="/?q={{ query }}&page={{ page + 1 }}">次へ</a>{% endif %}
+</nav>
+{% endblock %}

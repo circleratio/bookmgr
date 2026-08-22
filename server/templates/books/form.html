@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>{% if is_new %}新規登録{% else %}編集{% endif %}</h1>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+<form action="{% if is_new %}/books{% else %}/books/{{ id }}{% endif %}" method="post" class="card book-form">
+  <label for="isbn">ISBN</label>
+  <div class="isbn-row">
+    <input type="text" id="isbn" name="isbn" placeholder="978-4-10-101035-9"
+           value="{{ values.isbn or '' }}">
+    {% if is_new %}<button type="button" id="isbn-lookup-button">取得</button>{% endif %}
+  </div>
+  {% if is_new %}<p id="isbn-lookup-message" class="lookup-message"></p>{% endif %}
+
+  <label for="title">書名 *</label>
+  <input type="text" id="title" name="title" maxlength="255" required
+         value="{{ values.title or '' }}">
+
+  <label for="author">著者 *</label>
+  <input type="text" id="author" name="author" maxlength="255" required
+         value="{{ values.author or '' }}">
+
+  <label for="rating">評価</label>
+  <select id="rating" name="rating">
+    <option value="">未評価</option>
+    {% for n in range(1, 6) %}
+    <option value="{{ n }}" {% if values.rating == n %}selected{% endif %}>{{ n }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="publisher">出版社</label>
+  <input type="text" id="publisher" name="publisher" maxlength="255"
+         value="{{ values.publisher or '' }}">
+
+  <label for="published_date">出版日</label>
+  <input type="date" id="published_date" name="published_date"
+         value="{{ values.published_date or '' }}">
+
+  <label for="memo">メモ</label>
+  <textarea id="memo" name="memo" maxlength="2000" rows="4">{{ values.memo or '' }}</textarea>
+
+  <div class="form-actions">
+    <button type="submit">保存</button>
+    <a href="/">キャンセル</a>
+  </div>
+</form>
+
+{% if is_new %}
+<script>
+document.getElementById('isbn-lookup-button').addEventListener('click', async function () {
+  var isbn = document.getElementById('isbn').value.trim();
+  var msg = document.getElementById('isbn-lookup-message');
+  if (!isbn) {
+    msg.textContent = 'ISBNを入力してください';
+    return;
+  }
+  msg.textContent = '取得中...';
+  try {
+    var res = await fetch('/books/isbn-lookup?isbn=' + encodeURIComponent(isbn));
+    var body = await res.json();
+    if (!res.ok) {
+      msg.textContent = body.error || '取得に失敗しました';
+      return;
+    }
+    var data = body.data;
+    if (data.title) document.getElementById('title').value = data.title;
+    if (data.author) document.getElementById('author').value = data.author;
+    if (data.publisher) document.getElementById('publisher').value = data.publisher;
+    if (data.published_date) document.getElementById('published_date').value = data.published_date;
+    if (data.isbn) document.getElementById('isbn').value = data.isbn;
+    msg.textContent = '取得しました';
+  } catch (e) {
+    msg.textContent = '取得に失敗しました';
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

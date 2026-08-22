@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 
 class AppError(Exception):
@@ -44,6 +44,12 @@ class UpstreamError(AppError):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    from .auth import RedirectToLogin
+
+    @app.exception_handler(RedirectToLogin)
+    async def handle_redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
+        return RedirectResponse("/login", status_code=302)
+
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(
