@@ -42,5 +42,5 @@ app/src/main/java/com/bookmgr/android/
 
 ## 既知の制約
 
-- このプロジェクトはAndroid SDK / Gradleのビルド環境がないサーバー側の開発環境で作成されたため、`./gradlew build` 等での実機ビルド確認は行えていない。Android Studioで開いた際にビルドエラーが出た場合は、依存バージョン（AGP 8.5.2 / Kotlin 1.9.24 / Compose BOM 2024.06.00 等、`app/build.gradle.kts` 参照）の調整が必要な可能性がある。
+- Android SDK / Gradle環境（Gradle 8.7、JDK 17）で `assembleDebug` によるビルド成功を確認済み。JDKはGradle 8.7が対応する範囲（〜Java 22）内のバージョン（17または21を推奨）を使うこと。Android Studio付属JDKがそれより新しい場合は、別途JDK 17/21を用意して `JAVA_HOME` に設定する。
 - `gradle/wrapper/gradle-wrapper.jar`（バイナリ）は同梱していない。Android Studioで開けば自動的に補われる。
