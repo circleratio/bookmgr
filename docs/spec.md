@@ -4,33 +4,48 @@
 
 # アーキテクチャ
 
-- Go / Gin によるモノリシックなWebアプリケーション。
+- Python / FastAPI によるモノリシックなWebアプリケーション（`server/`）。元はGo/Ginで実装していたが移行した。
 - REST API（`/api/*`）とサーバーサイドレンダリング画面（それ以外）を同一プロセスで提供する。
-- 画面ハンドラはHTTP経由でAPIを呼び出さず、サービス層を直接呼び出す。
-- DBはsqlite3。マイグレーションはSQLファイルを起動時に適用する簡易方式とする。
+- 画面ハンドラ（SSR）はHTTP経由でAPIを呼び出さず、サービス層を直接呼び出す。
+- DBはsqlite3。標準ライブラリの`sqlite3`モジュールを生SQLのまま使用する（ORMは使わない）。単一コネクションを`threading.Lock`でシリアライズし、sqlite3が並行書き込みに対応しない点をGo版（`db.SetMaxOpenConns(1)`）と同様に扱う。マイグレーションはSQLファイルを起動時に適用する簡易方式とする。
+- CLIクライアント（`cmd/cli`）は元々サーバーのHTTP APIのみに依存しているため、Go実装のまま変更していない。
 
 # ディレクトリ構成
 
 ```
+server/
+  app/
+    main.py               # FastAPIアプリの組み立て（create_app）、エントリポイント（main）
+    config.py             # 環境変数読み込み（Settings）
+    db.py                 # sqlite3接続・起動時マイグレーション適用
+    errors.py             # アプリケーションエラー型とFastAPI例外ハンドラ
+    auth.py               # APIキー認証（X-API-Key）・セッションCookie認証
+    schemas.py            # Pydanticモデル（Book, BookInput, BookInfo）
+    template_helpers.py   # Jinja2テンプレート用ヘルパー（stars等）
+    repositories/
+      book_repository.py  # DBアクセス層
+    services/
+      book_service.py         # バリデーション・ビジネスロジック
+      isbn_lookup_service.py  # Google Books API連携
+    routers/
+      books.py            # REST APIハンドラ（/api/books系）
+      isbn_lookup.py      # REST APIハンドラ（/api/isbn-lookup）
+      web_auth.py         # SSR画面: ログイン/ログアウト
+      web_books.py        # SSR画面: 一覧・登録・編集・削除・ISBN検索(AJAX)
+  templates/               # Jinja2テンプレート（layout.html, login.html, books/*.html）
+  static/                  # CSS等の静的ファイル
+  tests/                   # pytest
+  requirements.txt
 cmd/
-  server/
-    main.go            # サーバーのエントリポイント、ルーティング定義
   cli/
-    main.go            # CLIクライアントのエントリポイント
+    main.go               # CLIクライアントのエントリポイント（Go、変更なし）
 internal/
-  model/                # 構造体定義（Book等）
-  repository/           # DBアクセス層（database/sql）
-  service/               # ビジネスロジック・バリデーション
-  handler/
-    api/                 # REST APIハンドラ
-    web/                 # SSR画面ハンドラ
-  middleware/            # APIキー認証ミドルウェア
-  apiclient/             # REST APIを呼び出すGoクライアント（cmd/cliが利用）
+  apiclient/               # REST APIを呼び出すGoクライアント（cmd/cliが利用、変更なし）
+  model/, repository/, service/, handler/, middleware/
+                            # 旧Go実装のサーバー。移行元として動作確認用に残しており、削除予定
 db/
-  migrations/            # DDL（SQLファイル）
-  bookmgr.db             # sqlite3ファイル（実行時生成、.gitignore対象）
-templates/                # HTMLテンプレート（html/template）
-static/                    # CSS等の静的ファイル
+  migrations/              # DDL（SQLファイル、Go/Python両実装で共有）
+  bookmgr.db               # sqlite3ファイル（実行時生成、.gitignore対象）
 android/                    # Androidアプリ（独立したGradle/Kotlinプロジェクト）
 docs/
   requirement.md
@@ -38,7 +53,7 @@ docs/
   plan.md
 ```
 
-サーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）とCLI（`cmd/cli`, `internal/apiclient`）は同じGoモジュール内に同居する。CLIはサーバーの内部パッケージ（`repository`等）には依存せず、`internal/apiclient`経由でHTTP/JSON APIのみを利用する。Androidは別言語・別ビルドシステムのため`android/`配下に完全に独立させ、Goモジュールのビルド対象には含めない。
+サーバー（`server/`）とCLI（`cmd/cli`, `internal/apiclient`）は同じリポジトリ内に同居するが、言語・依存関係は完全に独立している。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用するため、サーバーをGoからPythonへ移行してもCLI側の変更は不要だった。Androidも同様にHTTP/JSON APIのみに依存するため無改修。
 
 # DB設計
 
@@ -171,7 +186,7 @@ CREATE INDEX idx_books_author ON books(author);
 |---|---|---|---|
 | isbn | string | 必須 | 検索対象のISBN（ハイフン有無どちらも可） |
 
-`GET /books/isbn-lookup`（SSR画面用、Cookie認証）と同じ`ISBNLookupService`を呼び出す、`X-API-Key`ヘッダー認証版のエンドポイント。CLI・Androidなどブラウザ以外のAPIクライアントはこちらを使う。レスポンス形式・エラー内容は `# ISBN検索（Google Books API連携）` を参照（成功時は`{"data": {...}}`、`isbn`未指定は`400 VALIDATION_ERROR`、該当なしは`404 NOT_FOUND`、外部API呼び出し失敗は`502`相当）。
+`GET /books/isbn-lookup`（SSR画面用、Cookie認証）と同じ`ISBNLookupService`（`server/app/services/isbn_lookup_service.py`）を呼び出す、`X-API-Key`ヘッダー認証版のエンドポイント。CLI・Androidなどブラウザ以外のAPIクライアントはこちらを使う。レスポンス形式・エラー内容は `# ISBN検索（Google Books API連携）` を参照（成功時は`{"data": {...}}`、`isbn`未指定は`400 VALIDATION_ERROR`、該当なしは`404 NOT_FOUND`、外部API呼び出し失敗は`502`相当）。
 
 ### エラーコード
 
@@ -205,7 +220,7 @@ CREATE INDEX idx_books_author ON books(author);
 # ISBN検索（Google Books API連携）
 
 - 新規登録フォームにISBN入力欄と「取得」ボタンを設け、クリック時にブラウザから `GET /books/isbn-lookup?isbn=...` へfetchする（Cookieセッションで認証済みの画面用エンドポイントであり、`/api/*`とは別。`/api/*`はヘッダー認証のためブラウザJSから直接呼べないことによる）。
-- サーバー側は `internal/service` にある `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出す。検索結果には同じ書籍でもメタデータの充実度が異なる複数の候補（`items`）が含まれることがあるため、全候補を走査し各項目（書名・著者・出版社・出版日）で最初に見つかった非空の値を採用する。著者は複数著者を`,`区切りで連結する。ISBNは`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値を使う。
+- サーバー側は `server/app/services/isbn_lookup_service.py` の `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出す。検索結果には同じ書籍でもメタデータの充実度が異なる複数の候補（`items`）が含まれることがあるため、全候補を走査し各項目（書名・著者・出版社・出版日）で最初に見つかった非空の値を採用する。著者は複数著者を`,`区切りで連結する。ISBNは`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値を使う。
 - 取得成功時: `200 { "data": { "title", "author", "publisher", "published_date", "isbn" } }`。フロントエンドJSが該当フォーム項目（書名・著者・出版社・出版日・ISBN）に反映する。評価・メモはGoogle Books側に無いため対象外。
 - 該当書籍が見つからない場合: `404 { "error": "..." }`。
 - APIキー未指定・不正な場合や外部API呼び出し失敗時: `400`/`502` 相当のエラーJSON。
@@ -229,7 +244,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 # Androidクライアント
 
-- `android/` に独立したGradle/Kotlinプロジェクトとして実装する（ルートのGoモジュールには含めない）。
+- `android/` に独立したGradle/Kotlinプロジェクトとして実装する（ルートのGoモジュール（CLI用）やPythonサーバーには含めない）。
 - UI: Jetpack Compose + Material3。画面遷移はNavigation Compose。
 - 機能はWeb版と同等: 設定（サーバーURL・APIキー入力、端末内に保存）、一覧・検索（ページング）、詳細表示、新規登録・編集・削除、ISBN入力による書誌情報取得（`GET /api/isbn-lookup`）。
 - 通信: `/api/*` を `X-API-Key` ヘッダー認証で直接呼び出す（Web版と異なりCookieを使わないため、サーバー側の変更は不要）。
@@ -238,6 +253,6 @@ CREATE INDEX idx_books_author ON books(author);
 
 # 非機能
 
-- テスト: `internal/service`, `internal/repository` を中心にユニットテストを整備する。
+- テスト: `server/tests`（pytest）を中心にユニットテスト・ハンドラテストを整備する。CLI（Go）側は `internal/apiclient` のテストを維持する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
 - 設定: `API_KEY`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）を環境変数で受け取る。
