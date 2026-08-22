@@ -1,14 +1,8 @@
-/db/bookmgr.db
-/db/bookmgr.db-*
-/bookmgr
-/bookmgr-cli
-/tmp/
-*.test
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
 
-# Android
-android/.gradle/
-android/.idea/
-android/*.iml
-android/local.properties
-android/*/build/
-android/*/*.iml
+# SQLite runtime database
+db/*.db
