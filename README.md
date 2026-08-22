@@ -2,7 +2,7 @@
 
 蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Python/FastAPI（`server/`）で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照（これらはGo実装当時の設計書だが、DB設計・API仕様・画面仕様はPython版でも変更していない）。
 
-> 元はGo/Ginで実装していたが、Python/FastAPIへ移行した。旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）は削除済み。CLIクライアント（`cmd/cli`, `internal/apiclient`）は元々HTTP APIのみに依存していたため、Go実装のまま変更していない。
+> 元はGo/Ginで実装していたが、サーバー（`server/`）・CLIクライアント（`cli/`）ともPython/FastAPI・Pythonへ移行した。旧Go実装（`cmd/server`, `internal/{model,repository,service,handler,middleware}`）は削除済み。旧CLI（`cmd/cli`, `internal/apiclient`）は動作確認用に一時的に残しており、確認後に削除予定。
 
 ## 起動方法
 
@@ -29,17 +29,20 @@ python -m app.main
 ## CLIクライアント
 
 ```sh
-go build -o bookmgr-cli ./cmd/cli
+cd cli
+python -m venv .venv
+.venv\Scripts\activate          # Windows。macOS/Linuxは `source .venv/bin/activate`
+pip install -r requirements.txt
 
 export BOOKMGR_API_URL=http://localhost:8080   # 任意（デフォルト http://localhost:8080）
 export BOOKMGR_API_KEY=your-secret-key         # 必須（サーバーの API_KEY と同じ値）
 
-./bookmgr-cli list --q 猫
-./bookmgr-cli get 1
-./bookmgr-cli create --title "吾輩は猫である" --author "夏目漱石" --rating 5
-./bookmgr-cli update 1 --title "坊っちゃん" --author "夏目漱石"
-./bookmgr-cli delete 1
-./bookmgr-cli isbn-lookup 9784101010359
+python -m bookmgr_cli list --q 猫
+python -m bookmgr_cli get 1
+python -m bookmgr_cli create --title "吾輩は猫である" --author "夏目漱石" --rating 5
+python -m bookmgr_cli update 1 --title "坊っちゃん" --author "夏目漱石"
+python -m bookmgr_cli delete 1
+python -m bookmgr_cli isbn-lookup 9784101010359
 ```
 
 ## Androidクライアント
@@ -53,9 +56,8 @@ cd server
 pytest
 ```
 
-CLIクライアント（Go）側のテストは従来通り:
-
 ```sh
-go test ./internal/apiclient/...
+cd cli
+pytest
 ```
 
