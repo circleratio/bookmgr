@@ -27,6 +27,7 @@ def create_app(settings: Settings) -> FastAPI:
 
     app = FastAPI(lifespan=lifespan)
     app.state.api_key = settings.api_key
+    app.state.cookie_secure = settings.cookie_secure
     app.state.book_service = BookService(BookRepository(db))
     app.state.isbn_lookup_service = ISBNLookupService(settings.google_books_api_key)
 
@@ -49,8 +50,8 @@ def main() -> None:
 
     settings = Settings.from_env()
     app = create_app(settings)
-    print(f"listening on :{settings.port}")
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+    print(f"listening on {settings.host}:{settings.port}")
+    uvicorn.run(app, host=settings.host, port=settings.port)
 
 
 if __name__ == "__main__":

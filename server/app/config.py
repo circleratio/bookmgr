@@ -14,12 +14,17 @@ DEFAULT_STATIC_DIR = str(SERVER_DIR / "static")
 @dataclass
 class Settings:
     api_key: str
+    host: str = "0.0.0.0"
     port: int = 8080
     db_path: str = DEFAULT_DB_PATH
     migrations_dir: str = DEFAULT_MIGRATIONS_DIR
     templates_dir: str = DEFAULT_TEMPLATES_DIR
     static_dir: str = DEFAULT_STATIC_DIR
     google_books_api_key: str = ""
+    # Mark the session cookie Secure (HTTPS-only). Leave false for plain-HTTP
+    # local development; set true when served over HTTPS (e.g. behind Caddy),
+    # since browsers silently drop Secure cookies set over plain HTTP.
+    cookie_secure: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -28,7 +33,9 @@ class Settings:
             raise RuntimeError("API_KEY environment variable is required")
         return cls(
             api_key=api_key,
+            host=os.environ.get("HOST", "0.0.0.0"),
             port=int(os.environ.get("PORT", "8080")),
             db_path=os.environ.get("DB_PATH", DEFAULT_DB_PATH),
             google_books_api_key=os.environ.get("GOOGLE_BOOKS_API_KEY", ""),
+            cookie_secure=os.environ.get("COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
         )

@@ -1,0 +1,16 @@
+# Reverse proxy for bookmgr: terminates HTTPS (automatic Let's Encrypt
+# certificate) and forwards plain HTTP to the FastAPI server running
+# locally. Replace bookmgr.example.com with your actual domain; it must
+# already resolve (DNS A/AAAA record) to this machine's public IP, and
+# ports 80/443 must be reachable from the internet for the ACME challenge
+# and HTTPS traffic.
+#
+# Run the FastAPI server with HOST=127.0.0.1 and COOKIE_SECURE=true so it
+# only accepts connections from Caddy and marks the session cookie
+# HTTPS-only (see README.md).
+#
+# Usage: caddy run --config deploy/Caddyfile
+
+bookmgr.example.com {
+	reverse_proxy 127.0.0.1:8080
+}

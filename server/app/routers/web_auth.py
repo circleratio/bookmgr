@@ -26,7 +26,14 @@ def login(request: Request, api_key: str = Form(...)):
             status_code=401,
         )
     response = RedirectResponse("/", status_code=302)
-    response.set_cookie(SESSION_COOKIE_NAME, api_key, path="/", httponly=True, samesite="lax")
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        api_key,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=request.app.state.cookie_secure,
+    )
     return response
 
 
