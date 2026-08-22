@@ -1,8 +1,6 @@
 # bookmgr
 
-蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Python/FastAPI（`server/`）で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照（これらはGo実装当時の設計書だが、DB設計・API仕様・画面仕様はPython版でも変更していない）。
-
-> 元はGoで実装していたが、サーバー（`server/`）・CLIクライアント（`cli/`）ともPythonへ移行し、Go実装は削除済み。
+蔵書管理のためのウェブアプリケーション。REST API とサーバーサイドレンダリング画面を Python/FastAPI（`server/`）で提供する。詳細は `docs/requirement.md`, `docs/spec.md`, `docs/plan.md` を参照。
 
 ## 起動方法
 

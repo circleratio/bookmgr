@@ -1,14 +1,14 @@
-# 実装計画（Python移行）
+# 実装計画
 
-`docs/spec.md` の設計に基づく、サーバー（Go/Gin）・CLIクライアント（Go）のPythonへの移行手順。Androidアプリのみ、HTTP/JSON APIのみに依存するため対象外（無改修）。
+`docs/spec.md` の設計に基づく実装手順。フェーズ順に上から実装する。Androidアプリはサーバーの内部実装に依存しない独立したクライアントのため対象外。
 
 # 使用ライブラリ
 
 - Webフレームワーク: FastAPI
 - ASGIサーバー: Uvicorn
-- HTTPクライアント: httpx（Google Books API呼び出し）
+- HTTPクライアント: httpx（Google Books API呼び出し、CLIからのAPI呼び出し）
 - テンプレートエンジン: Jinja2（`fastapi.templating.Jinja2Templates`）
-- sqlite3: 標準ライブラリ`sqlite3`モジュール（ORM不使用。Go版の`database/sql`＋生SQLの構成をそのまま踏襲）
+- sqlite3: 標準ライブラリ`sqlite3`モジュール（ORM不使用、生SQLで実装）
 - テスト: pytest
 
 # フェーズ0: プロジェクト初期化
@@ -19,23 +19,23 @@
 
 # フェーズ1: DB層
 
-- [x] `server/app/db.py`: sqlite3接続初期化・起動時マイグレーション適用。Go版と同じ `db/migrations/` を共有し、単一コネクションを `threading.Lock` でシリアライズすることでsqlite3の並行書き込み非対応に対処（Go版の `db.SetMaxOpenConns(1)` と同じ狙い）
-- [x] `server/app/schemas.py`: `Book` / `BookInput` / `BookInfo`（Pydanticモデル）。JSONフィールド名はGo版の `json` タグとそのまま一致させ、クライアント側の契約を変えない
+- [x] `server/app/db.py`: sqlite3接続初期化・起動時マイグレーション適用。単一コネクションを `threading.Lock` でシリアライズし、sqlite3の並行書き込み非対応に対処
+- [x] `server/app/schemas.py`: `Book` / `BookInput` / `BookInfo`（Pydanticモデル）。フィールド名は `docs/spec.md` のAPI契約に一致させる
 - [x] `server/app/repositories/book_repository.py`: `BookRepository` 実装（`list` / `find_by_id` / `find_by_isbn` / `create` / `update` / `delete`）。ISBN重複はsqlite3の `IntegrityError` を判定して `ConflictError` に変換
-- [x] リポジトリ層のテスト（`:memory:` DB使用、`server/tests/test_book_repository.py`）。Go版 `book_repository_test.go` の全ケースを移植
+- [x] リポジトリ層のテスト（`:memory:` DB使用、`server/tests/test_book_repository.py`）
 
 # フェーズ2: サービス層
 
-- [x] `server/app/services/book_service.py`: バリデーション（title/author必須、rating範囲、isbn桁数、published_date形式）とリポジトリ呼び出しの仲介。Go版 `internal/service/book_service.go` のロジックを1対1で移植
+- [x] `server/app/services/book_service.py`: バリデーション（title/author必須、rating範囲、isbn桁数、published_date形式）とリポジトリ呼び出しの仲介
 - [x] `server/app/errors.py`: `ValidationError` / `NotFoundError` / `ConflictError` 等のアプリケーションエラー型と、FastAPIの例外ハンドラで `{"error": {"code","message"}}` 形式に変換する仕組み
-- [x] サービス層のテスト（`server/tests/test_book_service.py`）。Go版 `book_service_test.go` の全ケース（ISBN境界値、rating境界値、published_date形式など）を移植
+- [x] サービス層のテスト（`server/tests/test_book_service.py`、ISBN境界値・rating境界値・published_date形式などの境界値を網羅）
 
 # フェーズ3: REST API層
 
 - [x] `server/app/routers/books.py`: 5エンドポイント＋ISBN検索用 `GET /api/books/by-isbn/:isbn` を実装
-- [x] `server/app/routers/isbn_lookup.py`: `GET /api/isbn-lookup`（`server/app/services/isbn_lookup_service.py` がGoogle Books APIを呼び出し、複数候補のフィールドマージ・ISBN優先順位・published_date正規化のロジックをGo版から移植）
-- [x] Go版と同じ共通レスポンス形式（`data` / `pagination` / `error`）を例外ハンドラで統一的に生成し、パスやクエリパラメータの緩いパース（数値変換に失敗しても既定値にフォールバック等）もGo版の挙動に合わせる
-- [x] APIハンドラのテスト（`fastapi.testclient.TestClient`、`server/tests/test_books_api.py` / `test_isbn_lookup_api.py`）。Go版 `book_handler_test.go` / `isbn_lookup_test.go` の全ケースを移植
+- [x] `server/app/routers/isbn_lookup.py`: `GET /api/isbn-lookup`（`server/app/services/isbn_lookup_service.py` がGoogle Books APIを呼び出し、複数候補のフィールドマージ・ISBN優先順位・published_date正規化を行う）
+- [x] 共通レスポンス形式（`data` / `pagination` / `error`）を例外ハンドラで統一的に生成
+- [x] APIハンドラのテスト（`fastapi.testclient.TestClient`、`server/tests/test_books_api.py` / `test_isbn_lookup_api.py`）
 
 # フェーズ4: 認証
 
@@ -46,36 +46,32 @@
 
 # フェーズ5: SSR画面
 
-- [x] `server/templates/` にJinja2テンプレート作成（`layout.html`, `login.html`, `books/list.html`, `books/form.html`）。Go版の名前付きテンプレート合成（`{{define}}`/`{{template}}`）からJinja2の `extends` / `block` 継承方式に置き換え、`strVal`/`intVal`/`orDash` ヘルパーは `or ''` 相当の式で代替
+- [x] `server/templates/` にJinja2テンプレート作成（`layout.html`, `login.html`, `books/list.html`, `books/form.html`）。`extends` / `block` 継承で共通レイアウトを構成
 - [x] `server/app/routers/web_auth.py`: ログイン/ログアウト処理
 - [x] `server/app/routers/web_books.py`: 一覧・登録・編集・削除・ISBN検索（AJAX用、Cookie認証）の画面ハンドラ
-- [x] `server/static/style.css` をGo版からそのまま流用
+- [x] `server/static/style.css` を配置
 
 # フェーズ6: ルーティング・エントリポイント
 
 - [x] `server/app/main.py`: `create_app(settings)` でDB初期化・`Jinja2Templates`/`StaticFiles`設定・ルーター登録・ライフスパン（終了時にDBクローズ）を組み立て、`main()` で環境変数読み込み→`uvicorn.run`
 
-# フェーズ7: 動作確認・仕上げ
+# フェーズ7: サーバーの動作確認・仕上げ
 
-- [x] `pytest`（`server/tests/`、Go版の全テストケースを移植、61件）が通ることを確認
+- [x] `pytest`（`server/tests/`、61件）が通ることを確認
 - [x] 手動でサーバーを起動し、curlでログイン→一覧→登録→編集→削除、ISBN検索（API・Web両方）、認証エラー・バリデーションエラーの表示を確認
-- [x] READMEの起動方法をPython版（`server/` + venv + `python -m app.main`）に更新
-- [x] `docs/requirement.md` / `docs/spec.md` の技術スタック・アーキテクチャ記述をPython/FastAPIに更新
-- [x] 動作確認完了後、旧Go実装のサーバー（`cmd/server`, `internal/{model,repository,service,handler,middleware,apperr}`）を削除。CLI（`cmd/cli`, `internal/apiclient`）は当時まだGoのまま残していたため対象外とした
+- [x] READMEの起動方法を記載（`server/` + venv + `python -m app.main`）
+- [x] `docs/requirement.md` / `docs/spec.md` の技術スタック・アーキテクチャ記述を整備
 
-# フェーズ8: CLIクライアントのPython移行
+# フェーズ8: CLIクライアント
 
 - [x] `cli/` ディレクトリ作成、`requirements.txt`（httpx, pytest）作成
-- [x] `cli/bookmgr_cli/client.py`: `internal/apiclient` のGoクライアントを1対1で移植（`X-API-Key`ヘッダー認証、`{"error":{"code","message"}}` を `APIError` に変換）
-- [x] `cli/bookmgr_cli/main.py`: Go版の `flag` パッケージによるサブコマンド構成を `argparse` に置き換え。テーブル出力・JSON出力（インデント2・非ASCIIエスケープなし）、更新時に未指定の任意項目がクリアされる挙動（部分更新ではなく全置換）も含めてGo版と同じ振る舞いに揃えた
+- [x] `cli/bookmgr_cli/client.py`: `/api/*` を `X-API-Key` ヘッダー認証で呼び出すHTTPクライアント。`{"error":{"code","message"}}` を `APIError` に変換
+- [x] `cli/bookmgr_cli/main.py`: `argparse` によるサブコマンド構成（`list`/`get`/`create`/`update`/`delete`/`isbn-lookup`）。テーブル出力・JSON出力（インデント2・非ASCIIエスケープなし）
 - [x] Windows環境で標準出力の既定エンコーディングにより日本語が文字化けする問題に対応し、`main()` 内で `sys.stdout`/`sys.stderr` を明示的にUTF-8に固定
-- [x] `cli/tests/test_client.py`: Go版 `client_test.go` の全ケースを移植。`httptest.Server` の代わりに `httpx.MockTransport` で疑似サーバーを表現
-- [x] 手動でFastAPIサーバーを起動し、全サブコマンド（list/get/create/update/delete/isbn-lookup）と認証エラー・404エラーの経路をCLI経由で確認
-- [x] READMEのCLI起動方法をPython版（`cli/` + venv + `python -m bookmgr_cli`）に更新
-- [x] 動作確認完了後、旧Go実装（`cmd/cli`, `internal/apiclient`）を削除。他に参照元がなくなったため、ルートの `go.mod` / `go.sum` も削除しGoツールチェーンへの依存を完全に終了
+- [x] `cli/tests/test_client.py`: `httpx.MockTransport` で疑似サーバーを立て、CRUD・バリデーションエラー・認証エラー・検索/ページングを検証
+- [x] 手動でサーバーを起動し、全サブコマンド（list/get/create/update/delete/isbn-lookup）と認証エラー・404エラーの経路をCLI経由で確認
+- [x] READMEのCLI起動方法を記載（`cli/` + venv + `python -m bookmgr_cli`）
 
 # 実装順序の理由
 
-Go版のレイヤー構成（repository → service → handler）をそのまま踏襲し、同じ順序でPythonに移植した。ルーティング・JSON形状・エラーコードといった外部契約を一切変えないことを最優先し、各層でGo版の既存テストケースをpytestに1対1で移植することで、移行によるデグレードがないことを機械的に検証できるようにした。認証は API/Web どちらの層にも影響するため、両ハンドラの実装と並行して組み込んだ。SSR画面はテンプレートエンジンの書き方自体が変わる（Goのテンプレート合成 → Jinja2の継承）ため最後に着手し、先に固めたサービス層をそのまま再利用することで画面側の実装量を抑えた。
-
-CLIクライアントはサーバーのHTTP/JSON API契約のみに依存しており、サーバー実装の言語に非依存だったため、サーバー移行が完全に完了・削除された後に独立してPython化した。サーバー同様、「新実装＋テスト移植 → 手動動作確認 → 旧Go実装削除」の順で進め、各段階で動作確認を挟んでからでないと前の実装を消さない、という進め方をサーバー・CLIの両方で一貫させた。
+DBスキーマ・モデルを最初に固めてから、下位層（repository）→中位層（service）→上位層（handler）の順で積み上げることで、各層を独立してテストしながら進めた。認証はAPI・SSR画面どちらの層にも影響するため、両ハンドラの実装と並行して組み込んだ。SSR画面はテンプレートの書き方自体が独立した関心事のため、先に固めたサービス層をそのまま再利用する形で最後に着手し、画面側の実装量を抑えた。CLIクライアントはサーバーのHTTP/JSON API契約のみに依存する独立したクライアントのため、サーバーの実装が固まった後に着手した。

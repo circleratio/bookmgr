@@ -4,10 +4,10 @@
 
 # アーキテクチャ
 
-- Python / FastAPI によるモノリシックなWebアプリケーション（`server/`）。元はGo/Ginで実装していたが移行した。
+- Python / FastAPI によるモノリシックなWebアプリケーション（`server/`）。
 - REST API（`/api/*`）とサーバーサイドレンダリング画面（それ以外）を同一プロセスで提供する。
 - 画面ハンドラ（SSR）はHTTP経由でAPIを呼び出さず、サービス層を直接呼び出す。
-- DBはsqlite3。標準ライブラリの`sqlite3`モジュールを生SQLのまま使用する（ORMは使わない）。単一コネクションを`threading.Lock`でシリアライズし、sqlite3が並行書き込みに対応しない点をGo版（`db.SetMaxOpenConns(1)`）と同様に扱う。マイグレーションはSQLファイルを起動時に適用する簡易方式とする。
+- DBはsqlite3。標準ライブラリの`sqlite3`モジュールを生SQLのまま使用する（ORMは使わない）。sqlite3は並行書き込みに対応しないため、単一コネクションを`threading.Lock`でシリアライズする。マイグレーションはSQLファイルを起動時に適用する簡易方式とする。
 - CLIクライアント（`cli/`）もPython製。サーバーのHTTP/JSON API（`/api/*`）のみに依存し、サーバー内部実装（`server/app/`）には依存しない。
 
 # ディレクトリ構成
@@ -43,7 +43,7 @@ cli/
   tests/                   # pytest
   requirements.txt
 db/
-  migrations/              # DDL（SQLファイル、Go/Python両実装で共有）
+  migrations/              # DDL（SQLファイル）
   bookmgr.db               # sqlite3ファイル（実行時生成、.gitignore対象）
 android/                    # Androidアプリ（独立したGradle/Kotlinプロジェクト）
 docs/
@@ -52,7 +52,7 @@ docs/
   plan.md
 ```
 
-サーバー（`server/`）とCLI（`cli/`）は同じリポジトリ内に同居するが、それぞれ独立したPython環境（venv・`requirements.txt`）を持つ。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用する。Androidも同様にHTTP/JSON APIのみに依存する。旧Go実装（`cmd/server`, `cmd/cli`, `internal/`）は移行完了に伴いすべて削除済み。
+サーバー（`server/`）とCLI（`cli/`）は同じリポジトリ内に同居するが、それぞれ独立したPython環境（venv・`requirements.txt`）を持つ。CLIはサーバーの内部実装には依存せず、HTTP/JSON API（`/api/*`）のみを利用する。Androidも同様にHTTP/JSON APIのみに依存する。
 
 # DB設計
 

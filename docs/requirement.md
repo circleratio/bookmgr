@@ -31,6 +31,6 @@
 - UIはJetpack Composeで実装する。
 
 # 技術スタック
-- Python / FastAPI（旧: Go / Gin。移行済み）
+- Python / FastAPI
 - sqlite3
 
