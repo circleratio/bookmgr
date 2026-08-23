@@ -9,8 +9,13 @@
 # only accepts connections from Caddy and marks the session cookie
 # HTTPS-only (see README.md).
 #
+# The port below must match the PORT env var start.sh exports, NOT
+# necessarily the app's built-in default (8080, see app/config.py). Pick a
+# free port if 8080 is already used by another service on the same host
+# (this repo's own production instance runs on 8090 for that reason).
+#
 # Usage: caddy run --config deploy/Caddyfile
 
 bookmgr.example.com {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:8090
 }

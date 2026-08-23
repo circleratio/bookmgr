@@ -37,6 +37,12 @@ class UnauthorizedError(AppError):
     default_message = "invalid or missing API key"
 
 
+class RateLimitedError(AppError):
+    status_code = 429
+    code = "RATE_LIMITED"
+    default_message = "too many attempts, try again later"
+
+
 class UpstreamError(AppError):
     status_code = 502
     code = "UPSTREAM_ERROR"

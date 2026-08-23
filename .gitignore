@@ -12,3 +12,7 @@ android/.gradle/
 android/.idea/
 android/app/build/
 android/local.properties
+
+# Operational tool (it may includes API keys)
+start.sh
+

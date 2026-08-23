@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings
 from .db import Database
 from .errors import register_exception_handlers
+from .rate_limit import LoginRateLimiter
 from .repositories.book_repository import BookRepository
 from .routers.books import router as books_router
 from .routers.isbn_lookup import router as isbn_lookup_router
@@ -28,6 +29,8 @@ def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.state.api_key = settings.api_key
     app.state.cookie_secure = settings.cookie_secure
+    app.state.sessions = {}
+    app.state.login_limiter = LoginRateLimiter()
     app.state.book_service = BookService(BookRepository(db))
     app.state.isbn_lookup_service = ISBNLookupService(settings.google_books_api_key)
 
