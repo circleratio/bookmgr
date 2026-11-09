@@ -1,4 +1,5 @@
 import logging
+import re
 
 import httpx
 
@@ -6,6 +7,8 @@ from ..errors import NotFoundError, UpstreamError, ValidationError
 from ..schemas import BookInfo
 
 GOOGLE_BOOKS_BASE_URL = "https://www.googleapis.com/books/v1/volumes"
+
+_ISBN_PATTERN = re.compile(r"\d{13}|\d{9}[\dXx]")
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +36,21 @@ class ISBNLookupService:
         normalized = isbn.strip().replace("-", "")
         if not normalized:
             raise ValidationError("isbn is required")
+        # Only a bare ISBN may reach the upstream query, so arbitrary search
+        # terms (e.g. "intitle:...") cannot be injected into q.
+        if not _ISBN_PATTERN.fullmatch(normalized):
+            raise ValidationError(
+                "isbn must be 13 digits, or 10 digits with an optional trailing X "
+                "check digit (hyphens allowed)"
+            )
 
         params = {"q": f"isbn:{normalized}"}
-        if self._api_key:
-            params["key"] = self._api_key
+        # Send the API key as a header rather than a query parameter so it
+        # does not end up in logged request URLs.
+        headers = {"X-Goog-Api-Key": self._api_key} if self._api_key else {}
 
         try:
-            resp = httpx.get(self._base_url, params=params, timeout=5.0)
+            resp = httpx.get(self._base_url, params=params, headers=headers, timeout=5.0)
         except httpx.HTTPError as exc:
             # The client-facing message is intentionally generic; log the
             # underlying cause (e.g. upstream rate limiting) for diagnosis.

@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings
 from .db import Database
 from .errors import register_exception_handlers
+from .auth import SessionStore
 from .rate_limit import LoginRateLimiter
 from .repositories.book_repository import BookRepository
 from .routers.books import router as books_router
@@ -26,10 +27,12 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         db.close()
 
-    app = FastAPI(lifespan=lifespan)
+    # The interactive docs and OpenAPI schema are not behind authentication,
+    # so they are disabled to avoid exposing the API surface publicly.
+    app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.api_key = settings.api_key
     app.state.cookie_secure = settings.cookie_secure
-    app.state.sessions = {}
+    app.state.sessions = SessionStore()
     app.state.login_limiter = LoginRateLimiter()
     app.state.book_service = BookService(BookRepository(db))
     app.state.isbn_lookup_service = ISBNLookupService(settings.google_books_api_key)

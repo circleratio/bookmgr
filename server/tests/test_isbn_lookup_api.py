@@ -9,7 +9,7 @@ def test_isbn_lookup_unauthorized(client: TestClient):
 
 
 def test_isbn_lookup_success(client: TestClient, monkeypatch):
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, headers=None, timeout=None):
         import httpx
 
         req = httpx.Request("GET", url, params=params)
@@ -40,7 +40,7 @@ def test_isbn_lookup_success(client: TestClient, monkeypatch):
 
 
 def test_isbn_lookup_not_found(client: TestClient, monkeypatch):
-    def fake_get(url, params=None, timeout=None):
+    def fake_get(url, params=None, headers=None, timeout=None):
         import httpx
 
         req = httpx.Request("GET", url, params=params)

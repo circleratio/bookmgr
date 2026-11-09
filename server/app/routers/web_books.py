@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from ..auth import require_web_session
+from ..auth import require_same_origin, require_web_session
 from ..errors import AppError, NotFoundError, ValidationError
 from ..schemas import BookInput
 from ..services.book_service import BookService
 from ..services.isbn_lookup_service import ISBNLookupService
 
-router = APIRouter(dependencies=[Depends(require_web_session)])
+router = APIRouter(dependencies=[Depends(require_web_session), Depends(require_same_origin)])
 
 
 def get_templates(request: Request) -> Jinja2Templates:

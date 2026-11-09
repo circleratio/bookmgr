@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -6,12 +6,11 @@ from ..auth import (
     SESSION_COOKIE_NAME,
     SESSION_TTL_SECONDS,
     client_key,
-    create_session,
-    revoke_session,
+    require_same_origin,
     verify_api_key,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_same_origin)])
 
 
 def get_templates(request: Request) -> Jinja2Templates:
@@ -39,7 +38,7 @@ def login(request: Request, api_key: str = Form(...)):
         )
     limiter.record_success(key)
 
-    token = create_session(request)
+    token = request.app.state.sessions.create()
     response = RedirectResponse("/", status_code=302)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -55,7 +54,7 @@ def login(request: Request, api_key: str = Form(...)):
 
 @router.post("/logout")
 def logout(request: Request):
-    revoke_session(request, request.cookies.get(SESSION_COOKIE_NAME))
+    request.app.state.sessions.revoke(request.cookies.get(SESSION_COOKIE_NAME))
     response = RedirectResponse("/login", status_code=302)
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
     return response

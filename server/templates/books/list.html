@@ -47,8 +47,8 @@
 </table>
 
 <nav class="pagination">
-  {% if page > 1 %}<a href="/?q={{ query }}&page={{ page - 1 }}">前へ</a>{% endif %}
+  {% if page > 1 %}<a href="/?q={{ query|urlencode }}&page={{ page - 1 }}">前へ</a>{% endif %}
   <span>{{ page }} / {{ total_pages }}</span>
-  {% if page < total_pages %}<a href="/?q={{ query }}&page={{ page + 1 }}">次へ</a>{% endif %}
+  {% if page < total_pages %}<a href="/?q={{ query|urlencode }}&page={{ page + 1 }}">次へ</a>{% endif %}
 </nav>
 {% endblock %}

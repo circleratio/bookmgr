@@ -9,11 +9,12 @@ def patch_httpx_get(monkeypatch):
     """Stubs httpx.get so tests don't hit the real Google Books API."""
 
     def _patch(status_code: int, body: dict, capture: dict | None = None):
-        def fake_get(url, params=None, timeout=None):
+        def fake_get(url, params=None, headers=None, timeout=None):
             import httpx
 
             if capture is not None:
-                capture["key"] = (params or {}).get("key")
+                capture["params"] = params or {}
+                capture["headers"] = headers or {}
             req = httpx.Request("GET", url, params=params)
             return httpx.Response(status_code, json=body, request=req)
 
@@ -141,7 +142,7 @@ def test_lookup_upstream_error(patch_httpx_get):
         svc.lookup("9780000000000")
 
 
-def test_lookup_api_key_passed_as_query_param(patch_httpx_get):
+def test_lookup_api_key_passed_as_header(patch_httpx_get):
     capture: dict = {}
     patch_httpx_get(
         200, {"items": [{"volumeInfo": {"title": "T", "authors": ["A"]}}]}, capture=capture
@@ -149,4 +150,21 @@ def test_lookup_api_key_passed_as_query_param(patch_httpx_get):
 
     svc = ISBNLookupService(api_key="my-google-key")
     svc.lookup("9780000000000")
-    assert capture["key"] == "my-google-key"
+    assert capture["headers"].get("X-Goog-Api-Key") == "my-google-key"
+    assert "key" not in capture["params"]
+
+
+@pytest.mark.parametrize(
+    "isbn",
+    [
+        "abc",
+        "978000000000",
+        "97800000000001",
+        "9780000000000 intitle:x",
+        "123456789Y",
+    ],
+)
+def test_lookup_rejects_non_isbn_input(isbn):
+    svc = ISBNLookupService()
+    with pytest.raises(ValidationError):
+        svc.lookup(isbn)

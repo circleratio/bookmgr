@@ -10,6 +10,10 @@ DEFAULT_MIGRATIONS_DIR = str(REPO_ROOT / "db" / "migrations")
 DEFAULT_TEMPLATES_DIR = str(SERVER_DIR / "templates")
 DEFAULT_STATIC_DIR = str(SERVER_DIR / "static")
 
+# The API key is the sole credential for both the REST API and the web
+# screens, so require enough length to make online guessing infeasible.
+MIN_API_KEY_LENGTH = 32
+
 
 @dataclass
 class Settings:
@@ -31,6 +35,11 @@ class Settings:
         api_key = os.environ.get("API_KEY")
         if not api_key:
             raise RuntimeError("API_KEY environment variable is required")
+        if len(api_key) < MIN_API_KEY_LENGTH:
+            raise RuntimeError(
+                f"API_KEY must be at least {MIN_API_KEY_LENGTH} characters "
+                "(e.g. generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\")"
+            )
         return cls(
             api_key=api_key,
             host=os.environ.get("HOST", "0.0.0.0"),

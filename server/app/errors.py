@@ -37,6 +37,12 @@ class UnauthorizedError(AppError):
     default_message = "invalid or missing API key"
 
 
+class ForbiddenError(AppError):
+    status_code = 403
+    code = "FORBIDDEN"
+    default_message = "cross-origin request rejected"
+
+
 class RateLimitedError(AppError):
     status_code = 429
     code = "RATE_LIMITED"
@@ -47,6 +53,16 @@ class UpstreamError(AppError):
     status_code = 502
     code = "UPSTREAM_ERROR"
     default_message = "failed to fetch book info"
+
+
+def _describe_validation_errors(exc: RequestValidationError) -> str:
+    """Summarizes validation errors by field location and message only,
+    without echoing the submitted input values back to the client."""
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(x) for x in err.get("loc", ()))
+        parts.append(f"{loc}: {err.get('msg', 'invalid value')}")
+    return "; ".join(parts) or "invalid value"
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -72,7 +88,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": {
                     "code": "VALIDATION_ERROR",
-                    "message": f"invalid request body: {exc}",
+                    "message": f"invalid request body: {_describe_validation_errors(exc)}",
                 }
             },
         )

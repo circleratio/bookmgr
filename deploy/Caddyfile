@@ -17,5 +17,17 @@
 # Usage: caddy run --config deploy/Caddyfile
 
 bookmgr.example.com {
+	# Security headers: force HTTPS on return visits (HSTS), forbid framing
+	# (clickjacking), disable MIME sniffing, and keep URLs (which may carry
+	# search queries) out of the Referer sent to other sites.
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		Content-Security-Policy "frame-ancestors 'none'"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
 	reverse_proxy 127.0.0.1:8090
 }

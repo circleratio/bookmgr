@@ -8,9 +8,9 @@
 cd server
 python -m venv .venv
 .venv\Scripts\activate          # Windows。macOS/Linuxは `source .venv/bin/activate`
-pip install -r requirements.txt
+pip install -r requirements.txt      # テストも実行する場合は requirements-dev.txt
 
-export API_KEY=your-secret-key       # 必須
+export API_KEY=...                   # 必須（32文字以上。生成例: python -c "import secrets; print(secrets.token_urlsafe(32))"）
 export HOST=0.0.0.0                  # 任意（デフォルト 0.0.0.0。リバースプロキシ配下では127.0.0.1推奨、後述）
 export PORT=8080                     # 任意（デフォルト 8080）
 export DB_PATH=db/bookmgr.db         # 任意（デフォルト db/bookmgr.db、リポジトリルート基準）
@@ -25,6 +25,8 @@ python -m app.main
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
 - 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
+- `API_KEY` が32文字未満の場合は起動に失敗する。APIキーはREST API・画面ログイン共通の唯一の認証情報のため、十分な長さの乱数を使うこと。
+- `/docs`・`/redoc`・`/openapi.json`（FastAPIの自動生成ドキュメント）は無効化している。
 
 ## HTTPS化（Caddyをリバースプロキシとして使う）
 
@@ -33,7 +35,7 @@ python -m app.main
 1. サーバーをローカルポートのみで待ち受けるように起動する（外部から直接`PORT`にアクセスできないようにする）。
 
    ```sh
-   export API_KEY=your-secret-key
+   export API_KEY=...             # 32文字以上
    export HOST=127.0.0.1          # Caddyからのみ受け付ける
    export COOKIE_SECURE=true      # HTTPS配信時はセッションCookieにSecure属性を付与する
 
@@ -50,6 +52,10 @@ python -m app.main
    caddy run --config deploy/Caddyfile
    ```
 
+   `deploy/Caddyfile` はHSTS・`X-Frame-Options`・`Content-Security-Policy: frame-ancestors 'none'`・`X-Content-Type-Options`・`Referrer-Policy` のセキュリティヘッダーを付与する。HSTSを有効にするとブラウザは以後1年間そのドメインへ平文HTTPで接続しなくなるため、HTTPS配信が安定してから運用すること。
+
+   画面のPOST（ログイン・登録・更新・削除・ログアウト）はCSRF対策として`Origin`（無ければ`Referer`）ヘッダーが`Host`と一致することを検証する。Caddyの`reverse_proxy`は既定で元の`Host`ヘッダーをそのまま転送するため追加設定は不要だが、`Host`を書き換えるプロキシ設定にすると画面のPOSTがすべて`403`になる。
+
 4. `https://<ドメイン>` でアクセスできる。CLI・Androidアプリは接続先URLを`https://<ドメイン>`に変更するだけでよく（正規CA発行証明書のため）、クライアント側の追加設定は不要。
 
 ## CLIクライアント
@@ -58,10 +64,10 @@ python -m app.main
 cd cli
 python -m venv .venv
 .venv\Scripts\activate          # Windows。macOS/Linuxは `source .venv/bin/activate`
-pip install -r requirements.txt
+pip install -r requirements.txt      # テストも実行する場合は requirements-dev.txt
 
 export BOOKMGR_API_URL=http://localhost:8080   # 任意（デフォルト http://localhost:8080）
-export BOOKMGR_API_KEY=your-secret-key         # 必須（サーバーの API_KEY と同じ値）
+export BOOKMGR_API_KEY=...                     # 必須（サーバーの API_KEY と同じ値）
 
 python -m bookmgr_cli list --q 猫
 python -m bookmgr_cli get 1

@@ -35,13 +35,15 @@ server/
   templates/               # Jinja2テンプレート（layout.html, login.html, books/*.html）
   static/                  # CSS等の静的ファイル
   tests/                   # pytest
-  requirements.txt
+  requirements.txt         # 実行時依存（バージョン固定）
+  requirements-dev.txt     # 開発・テスト用依存（pytest）
 cli/
   bookmgr_cli/
     main.py                # エントリポイント、argparseによるサブコマンド定義
     client.py              # REST APIを呼び出すHTTPクライアント（httpx使用）
   tests/                   # pytest
-  requirements.txt
+  requirements.txt         # 実行時依存（バージョン固定）
+  requirements-dev.txt     # 開発・テスト用依存（pytest）
 db/
   migrations/              # DDL（SQLファイル）
   bookmgr.db               # sqlite3ファイル（実行時生成、.gitignore対象）
@@ -94,13 +96,17 @@ CREATE INDEX idx_books_author ON books(author);
 
 # 認証設計
 
-- 固定のAPIキーを環境変数（`API_KEY`）で設定する運用とする（利用者テーブルは持たない）。
+- 固定のAPIキーを環境変数（`API_KEY`）で設定する運用とする（利用者テーブルは持たない）。APIキーは32文字以上を必須とし、満たさない場合は起動に失敗する。
+- APIキーの比較は `secrets.compare_digest` で行う。
 - REST APIエンドポイント（`/api/*`）: リクエストヘッダー `X-API-Key` にAPIキーを必須とする。一致しない場合は `401 Unauthorized` を返す。
 - SSR画面（`/`, `/books/*` など）: 未ログイン状態でアクセスすると `/login` にリダイレクトする。
   - `GET /login`: APIキー入力フォームを表示。
-  - `POST /login`: 入力されたAPIキーを検証し、一致すればCookie（`session`、`HttpOnly`, `SameSite=Lax`）にAPIキーを保存してトップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
-  - `POST /logout`: Cookieを削除してログイン画面へリダイレクト。
-  - 画面用ミドルウェアはCookieの値がAPIキーと一致するかを検証する。
+  - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
+  - `POST /logout`: サーバー側のセッションを破棄し、Cookieを削除してログイン画面へリダイレクト。
+  - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはサーバー再起動で全て失効する。
+- レート制限: APIキー認証（`/api/*`のヘッダー認証・`POST /login`）の失敗をクライアント単位で記録し、5分間に10回失敗すると以後の試行を `429 RATE_LIMITED` で拒否する。認証成功で記録はリセットされる。クライアントはIPv4ではアドレス単位、IPv6では`/64`プレフィックス単位で識別する（アドレスを入れ替えて制限を回避されないため）。
+- CSRF対策: 画面のPOST（`/login`, `/logout`, `/books`, `/books/:id`, `/books/:id/delete`）は`Origin`ヘッダー（無ければ`Referer`）のホスト部が`Host`ヘッダーと一致することを検証し、不一致・どちらも無い場合は`403 FORBIDDEN`を返す（`require_same_origin`）。`SameSite=Lax`と併用する多層防御。
+- FastAPIの自動生成ドキュメント（`/docs`, `/redoc`, `/openapi.json`）は認証なしで公開されるため無効化する。
 
 # API仕様
 
@@ -193,9 +199,13 @@ CREATE INDEX idx_books_author ON books(author);
 |---|---|---|
 | 400 | VALIDATION_ERROR | 入力値不正 |
 | 401 | UNAUTHORIZED | APIキー不一致・未指定 |
+| 403 | FORBIDDEN | 画面のPOSTで`Origin`/`Referer`が不一致・未指定（CSRF対策） |
 | 404 | NOT_FOUND | 指定IDの蔵書が存在しない |
 | 409 | CONFLICT | ISBN重複 |
+| 429 | RATE_LIMITED | 認証失敗回数の上限超過 |
 | 500 | INTERNAL_ERROR | サーバー内部エラー |
+
+- リクエストボディの型エラーなどによる`400 VALIDATION_ERROR`のメッセージは、項目位置とエラー内容のみを含み、送信された入力値は含めない。
 
 # 画面設計（SSR）
 
@@ -223,7 +233,8 @@ CREATE INDEX idx_books_author ON books(author);
 - 取得成功時: `200 { "data": { "title", "author", "publisher", "published_date", "isbn" } }`。フロントエンドJSが該当フォーム項目（書名・著者・出版社・出版日・ISBN）に反映する。評価・メモはGoogle Books側に無いため対象外。
 - 該当書籍が見つからない場合: `404 { "error": "..." }`。
 - APIキー未指定・不正な場合や外部API呼び出し失敗時: `400`/`502` 相当のエラーJSON。
-- Google BooksのAPIキー（`GOOGLE_BOOKS_API_KEY`）は任意。設定時のみクエリパラメータ`key`として付与する（未設定でも動作する）。
+- 入力ISBNはハイフンを除いて13桁の数字、または9桁の数字＋数字/`X`の10桁であることを検証し、満たさない場合は`400`を返す（任意の検索語がGoogle Booksのクエリに混入しないようにするため）。
+- Google BooksのAPIキー（`GOOGLE_BOOKS_API_KEY`）は任意。設定時のみ`X-Goog-Api-Key`リクエストヘッダーとして付与する（URLに含めるとHTTPクライアントのログ等に残るため、クエリパラメータは使わない。未設定でも動作する）。
 - `publishedDate`が年のみ（`YYYY`）や年月のみ（`YYYY-MM`）の場合は、フォームの`date`入力欄に収まるよう`-01-01`/`-01`を補って`YYYY-MM-DD`に正規化する。
 
 # CLIクライアント
@@ -247,11 +258,14 @@ CREATE INDEX idx_books_author ON books(author);
 - UI: Jetpack Compose + Material3。画面遷移はNavigation Compose。
 - 機能はWeb版と同等: 設定（サーバーURL・APIキー入力、端末内に保存）、一覧・検索（ページング）、詳細表示、新規登録・編集・削除、ISBN入力による書誌情報取得（`GET /api/isbn-lookup`）。
 - 通信: `/api/*` を `X-API-Key` ヘッダー認証で直接呼び出す（Web版と異なりCookieを使わないため、サーバー側の変更は不要）。
-- 設定値の永続化: Jetpack DataStore（Preferences）。
+- 設定値の永続化: Jetpack DataStore（Preferences）。APIキーを含むため、`android:allowBackup="false"`と`dataExtractionRules`でクラウドバックアップ・端末間転送の対象から除外する。
+- 平文HTTP: `network_security_config.xml`で既定は禁止し、開発用ホスト（`10.0.2.2`, `localhost`, `127.0.0.1`）のみ許可する。それ以外のサーバーにはHTTPSで接続する。
 - 初回起動時、サーバーURL・APIキーが未設定であれば設定画面を表示する。
 
 # 非機能
 
 - テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
-- 設定: `API_KEY`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）を環境変数で受け取る。
+- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。
+- 依存パッケージ: `requirements.txt` は動作確認済みのバージョンに`==`で固定する。pytest等の開発用依存は`requirements-dev.txt`に分離する。
+- HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: frame-ancestors 'none'`・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。
