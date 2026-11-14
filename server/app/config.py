@@ -31,6 +31,9 @@ class Settings:
     # local development; set true when served over HTTPS (e.g. behind Caddy),
     # since browsers silently drop Secure cookies set over plain HTTP.
     cookie_secure: bool = False
+    # uvicorn access log. Request lines include query strings (search terms,
+    # ISBNs), so it can be turned off with ACCESS_LOG=false for privacy.
+    access_log: bool = True
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -49,4 +52,5 @@ class Settings:
             db_path=os.environ.get("DB_PATH", DEFAULT_DB_PATH),
             google_books_api_key=os.environ.get("GOOGLE_BOOKS_API_KEY", ""),
             cookie_secure=os.environ.get("COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
+            access_log=os.environ.get("ACCESS_LOG", "true").lower() not in ("0", "false", "no"),
         )

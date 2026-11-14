@@ -16,6 +16,7 @@ export PORT=8080                     # 任意（デフォルト 8080）
 export DB_PATH=/path/to/bookmgr.db  # 任意（デフォルト <リポジトリルート>/db/bookmgr.db。相対パスは起動時のカレントディレクトリ基準になるため絶対パスで指定する）
 export GOOGLE_BOOKS_API_KEY=...      # 任意（新規登録画面のISBN取得機能で使用。未設定でも動作する）
 export COOKIE_SECURE=false           # 任意（デフォルト false。HTTPS配信時はtrueにする、後述）
+export ACCESS_LOG=true               # 任意（デフォルト true。falseでアクセスログを出力しない、後述）
 
 python -m app.main
 ```
@@ -27,6 +28,8 @@ python -m app.main
 - 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
 - `API_KEY` が32文字未満の場合は起動に失敗する。APIキーはREST API・画面ログイン共通の唯一の認証情報のため、十分な長さの乱数を使うこと。
 - `/docs`・`/redoc`・`/openapi.json`（FastAPIの自動生成ドキュメント）は無効化している。
+- セキュリティヘッダー（`Content-Security-Policy`・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`）はアプリ自身もすべてのレスポンスに付与するため、Caddyを介さずに起動した場合も有効。HSTSのみHTTPS終端側（Caddy）で付与する。
+- アクセスログ（uvicorn）にはURLのクエリ文字列（検索語・ISBN）が記録される。不要なら `ACCESS_LOG=false` で無効化できる。systemdで運用する場合ログはjournaldに残るため、`/etc/systemd/journald.conf` の `MaxRetentionSec=`（例: `30day`）で保存期間を制限するとよい。
 
 ## HTTPS化（Caddyをリバースプロキシとして使う）
 

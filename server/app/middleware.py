@@ -90,3 +90,49 @@ class RequestGuardMiddleware:
         except BodyTooLarge:
             if not response_started:
                 await _too_large()(scope, receive, send)
+
+
+# Security headers sent on every response, so the app is protected even when
+# run without Caddy (local development, LAN). Keep in sync with
+# deploy/Caddyfile, which sets the same values (plus HSTS) at the edge.
+SECURITY_HEADERS: dict[str, str] = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+}
+
+_SECURITY_HEADERS_RAW = [
+    (name.lower().encode("latin-1"), value.encode("latin-1"))
+    for name, value in SECURITY_HEADERS.items()
+]
+
+
+class SecurityHeadersMiddleware:
+    """Adds SECURITY_HEADERS to every HTTP response that does not already set them.
+
+    HSTS is intentionally left to the TLS-terminating proxy: the app itself
+    speaks plain HTTP and cannot tell whether it is reached over HTTPS.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _ in headers}
+                headers.extend(h for h in _SECURITY_HEADERS_RAW if h[0] not in present)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)

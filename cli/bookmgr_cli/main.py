@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+import unicodedata
 
 from .client import APIError, Client, InsecureURLError, check_base_url
 
@@ -63,11 +64,37 @@ def book_input_from_args(args: argparse.Namespace) -> dict:
     return input
 
 
+# Bidirectional override/isolate characters, which can visually reorder
+# terminal output (e.g. "Trojan Source"-style spoofing).
+_BIDI_CONTROLS = frozenset("\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069")
+
+
+def _is_unsafe_char(ch: str) -> bool:
+    return unicodedata.category(ch) == "Cc" or ch in _BIDI_CONTROLS
+
+
+def sanitize(text: str) -> str:
+    """Replaces control characters (ANSI escapes, C1 controls, newlines, bidi
+    overrides) with U+FFFD so server-provided text, e.g. metadata imported
+    from Google Books, cannot inject terminal escape sequences."""
+    return "".join("\ufffd" if _is_unsafe_char(ch) else ch for ch in text)
+
+
+def escape_json_controls(text: str) -> str:
+    """json.dumps(ensure_ascii=False) already escapes C0 controls inside
+    strings but leaves DEL, C1 controls and bidi overrides raw; escape those
+    as \\uXXXX. Layout newlines from indent= are kept."""
+    return "".join(
+        f"\\u{ord(ch):04x}" if ch != "\n" and _is_unsafe_char(ch) else ch for ch in text
+    )
+
+
 def print_json(value) -> None:
-    print(json.dumps(value, indent=2, ensure_ascii=False))
+    print(escape_json_controls(json.dumps(value, indent=2, ensure_ascii=False)))
 
 
 def print_table(rows: list[list[str]]) -> None:
+    rows = [[sanitize(cell) for cell in row] for row in rows]
     widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
     for row in rows:
         print("  ".join(cell.ljust(w) for cell, w in zip(row, widths)).rstrip())
@@ -159,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             _HANDLERS[args.command](client, args)
         except APIError as e:
-            print(f"Error: {e}", file=sys.stderr)
+            print(f"Error: {sanitize(str(e))}", file=sys.stderr)
             return 1
 
     return 0

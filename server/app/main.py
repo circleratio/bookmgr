@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings
 from .db import Database
 from .errors import register_exception_handlers
-from .middleware import RequestGuardMiddleware
+from .middleware import RequestGuardMiddleware, SecurityHeadersMiddleware
 from .auth import SessionStore
 from .rate_limit import LoginRateLimiter
 from .repositories.book_repository import BookRepository
@@ -45,6 +45,9 @@ def create_app(settings: Settings) -> FastAPI:
 
     register_exception_handlers(app)
     app.add_middleware(RequestGuardMiddleware)
+    # Added last so it is outermost and also covers RequestGuardMiddleware's
+    # early 401/413 responses.
+    app.add_middleware(SecurityHeadersMiddleware)
     app.include_router(books_router, prefix="/api")
     app.include_router(isbn_lookup_router, prefix="/api")
     app.include_router(web_auth_router)
@@ -59,7 +62,7 @@ def main() -> None:
     settings = Settings.from_env()
     app = create_app(settings)
     print(f"listening on {settings.host}:{settings.port}")
-    uvicorn.run(app, host=settings.host, port=settings.port)
+    uvicorn.run(app, host=settings.host, port=settings.port, access_log=settings.access_log)
 
 
 if __name__ == "__main__":

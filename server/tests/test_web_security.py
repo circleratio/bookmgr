@@ -244,3 +244,39 @@ def test_normal_sized_body_accepted(client: TestClient):
         "/api/books", json={"title": "t", "author": "a", "memo": "m" * 2000}, headers=auth_headers()
     )
     assert resp.status_code == 201
+
+
+@pytest.mark.parametrize("path", ["/login", "/static/style.css", "/api/books"])
+def test_security_headers_on_every_response(client: TestClient, path: str):
+    from app.middleware import SECURITY_HEADERS
+
+    resp = client.get(path)  # /api/books without a key -> early 401 from middleware
+    for name, value in SECURITY_HEADERS.items():
+        assert resp.headers.get(name) == value, (path, name)
+    assert "strict-transport-security" not in resp.headers
+
+
+def test_security_headers_not_duplicated(client: TestClient):
+    resp = client.get("/login")
+    assert len(resp.headers.get_list("content-security-policy")) == 1
+
+
+def test_security_headers_match_caddyfile():
+    """The app and deploy/Caddyfile must send the same header values."""
+    from pathlib import Path
+
+    from app.middleware import SECURITY_HEADERS
+
+    caddyfile = (Path(__file__).resolve().parents[2] / "deploy" / "Caddyfile").read_text()
+    for name, value in SECURITY_HEADERS.items():
+        assert f'{name} "{value}"' in caddyfile, name
+
+
+@pytest.mark.parametrize("raw,expected", [(None, True), ("true", True), ("false", False), ("0", False)])
+def test_settings_access_log(monkeypatch, raw, expected):
+    monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
+    if raw is None:
+        monkeypatch.delenv("ACCESS_LOG", raising=False)
+    else:
+        monkeypatch.setenv("ACCESS_LOG", raw)
+    assert Settings.from_env().access_log is expected

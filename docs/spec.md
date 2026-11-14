@@ -20,7 +20,7 @@ server/
     db.py                 # sqlite3接続・起動時マイグレーション適用
     errors.py             # アプリケーションエラー型とFastAPI例外ハンドラ
     auth.py               # APIキー認証（X-API-Key）・セッションCookie認証
-    middleware.py         # /api/* のAPIキー認証とリクエストボディサイズ上限（ボディ解析前に実行）
+    middleware.py         # /api/* のAPIキー認証・リクエストボディサイズ上限（ボディ解析前に実行）・セキュリティヘッダー付与
     schemas.py            # Pydanticモデル（Book, BookInput, BookInfo）
     template_helpers.py   # Jinja2テンプレート用ヘルパー（stars等）
     repositories/
@@ -243,6 +243,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 - `cli/bookmgr_cli` に実装するPython製CLI（`argparse`でサブコマンドを定義、`client.py` が `/api/*` を `X-API-Key` ヘッダー認証で呼び出す）。
 - 接続設定は環境変数で受け取る: `BOOKMGR_API_URL`（例: `http://localhost:8080`）, `BOOKMGR_API_KEY`（必須）。
+- 端末出力: サーバーから受け取った文字列は、表形式では制御文字（ANSIエスケープ・C1制御文字・改行・双方向テキスト制御文字）を`U+FFFD`に置き換え、JSON出力では`\uXXXX`にエスケープしてから表示する（ターミナルエスケープシーケンスの注入対策）。
 - `BOOKMGR_API_URL`が平文`http://`の場合、接続先がループバック（`localhost`, `127.0.0.0/8`, `::1`）以外ならAPIキーを平文で送らないよう起動時にエラー終了する（Androidの平文HTTP制限と同じ方針）。
 - サブコマンド:
   | コマンド | 説明 |
@@ -269,6 +270,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 - テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
-- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。
+- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。`ACCESS_LOG`（任意、既定`true`）で uvicorn のアクセスログを切り替える。
+- セキュリティヘッダー: アプリ（`SecurityHeadersMiddleware`）がすべてのレスポンスにCSP・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`を付与する（Caddyfileと同じ値。HSTSはCaddyのみ）。
 - 依存パッケージ: `requirements.txt` は動作確認済みのバージョンに`==`で固定する。pytest等の開発用依存は`requirements-dev.txt`に分離する。
 - HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'`（画面のJavaScriptは`static/app.js`に集約し、インラインスクリプト・イベントハンドラ属性は使わない）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。
