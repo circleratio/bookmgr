@@ -35,7 +35,7 @@
       <td>{{ book.published_date or "-" }}</td>
       <td class="actions">
         <a href="/books/{{ book.id }}/edit">編集</a>
-        <form action="/books/{{ book.id }}/delete" method="post" onsubmit="return confirm('削除しますか?');">
+        <form action="/books/{{ book.id }}/delete" method="post" data-confirm="削除しますか?">
           <button type="submit" class="link-button">削除</button>
         </form>
       </td>

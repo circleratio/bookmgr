@@ -18,7 +18,9 @@ MIN_API_KEY_LENGTH = 32
 @dataclass
 class Settings:
     api_key: str
-    host: str = "0.0.0.0"
+    # Loopback by default so a forgotten HOST never exposes plain HTTP
+    # publicly; set HOST=0.0.0.0 explicitly to accept remote connections.
+    host: str = "127.0.0.1"
     port: int = 8080
     db_path: str = DEFAULT_DB_PATH
     migrations_dir: str = DEFAULT_MIGRATIONS_DIR
@@ -42,7 +44,7 @@ class Settings:
             )
         return cls(
             api_key=api_key,
-            host=os.environ.get("HOST", "0.0.0.0"),
+            host=os.environ.get("HOST", "127.0.0.1"),
             port=int(os.environ.get("PORT", "8080")),
             db_path=os.environ.get("DB_PATH", DEFAULT_DB_PATH),
             google_books_api_key=os.environ.get("GOOGLE_BOOKS_API_KEY", ""),

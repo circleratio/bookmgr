@@ -157,3 +157,28 @@ def test_web_huge_page_does_not_500(client: TestClient):
     login(client)
     resp = client.get("/?page=99999999999999999999")
     assert resp.status_code == 200
+
+
+def test_templates_have_no_inline_scripts():
+    """The CSP uses script-src 'self', so inline scripts and event handler
+    attributes would be blocked; keep all JS in static/app.js."""
+    import re
+    from pathlib import Path
+
+    templates = Path(__file__).resolve().parents[1] / "templates"
+    for path in templates.rglob("*.html"):
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"<script(?![^>]*\bsrc=)", text), path
+        assert not re.search(r"\son[a-z]+\s*=", text), path
+
+
+def test_static_app_js_served(client: TestClient):
+    resp = client.get("/static/app.js")
+    assert resp.status_code == 200
+    assert "data-confirm" in resp.text
+
+
+def test_settings_default_host_is_loopback(monkeypatch):
+    monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
+    monkeypatch.delenv("HOST", raising=False)
+    assert Settings.from_env().host == "127.0.0.1"

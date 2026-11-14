@@ -91,7 +91,7 @@ class FakeServer:
 @pytest.fixture
 def client():
     transport = httpx.MockTransport(FakeServer().handle)
-    with Client("http://testserver", TEST_API_KEY, transport=transport) as c:
+    with Client("https://testserver", TEST_API_KEY, transport=transport) as c:
         yield c
 
 
@@ -123,7 +123,7 @@ def test_create_validation_error(client: Client):
 
 def test_unauthorized():
     transport = httpx.MockTransport(FakeServer().handle)
-    with Client("http://testserver", "wrong-key", transport=transport) as client:
+    with Client("https://testserver", "wrong-key", transport=transport) as client:
         with pytest.raises(APIError) as exc_info:
             client.list()
         assert exc_info.value.status_code == 401
@@ -136,3 +136,45 @@ def test_list_search_and_pagination(client: Client):
     books, pagination = client.list(page=1, page_size=2)
     assert pagination["total"] == 3
     assert len(books) == 2
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://books.example.com",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://[::1]:8080",
+        "HTTPS://Books.Example.com/",
+    ],
+)
+def test_check_base_url_accepts_safe_urls(url):
+    from bookmgr_cli.client import check_base_url
+
+    check_base_url(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://books.example.com",
+        "http://192.168.1.10:8080",
+        "http://localhost.example.com",
+        "ftp://localhost",
+        "localhost:8080",
+    ],
+)
+def test_check_base_url_rejects_cleartext_remote(url):
+    from bookmgr_cli.client import InsecureURLError, check_base_url
+
+    with pytest.raises(InsecureURLError):
+        check_base_url(url)
+
+
+def test_main_rejects_insecure_url(monkeypatch, capsys):
+    from bookmgr_cli.main import main
+
+    monkeypatch.setenv("BOOKMGR_API_URL", "http://books.example.com")
+    monkeypatch.setenv("BOOKMGR_API_KEY", TEST_API_KEY)
+    assert main(["list"]) == 1
+    assert "https://" in capsys.readouterr().err

@@ -1,6 +1,38 @@
 from __future__ import annotations
 
+import ipaddress
+from urllib.parse import urlsplit
+
 import httpx
+
+
+class InsecureURLError(ValueError):
+    """Raised when the API key would be sent in cleartext to a remote host."""
+
+
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def check_base_url(base_url: str) -> None:
+    """Rejects base URLs that would send the X-API-Key header in cleartext
+    over the network: plain http:// is allowed only for loopback hosts
+    (local development), matching the Android client's policy."""
+    parts = urlsplit(base_url)
+    scheme = parts.scheme.lower()
+    if scheme == "https":
+        return
+    if scheme == "http" and _is_loopback((parts.hostname or "").lower()):
+        return
+    raise InsecureURLError(
+        f"refusing to use {base_url!r}: use https:// "
+        "(plain http:// is allowed only for localhost/127.0.0.1/::1)"
+    )
 
 
 class APIError(Exception):
@@ -19,6 +51,7 @@ class Client:
     X-API-Key header. Mirrors internal/apiclient's Go client 1:1."""
 
     def __init__(self, base_url: str, api_key: str, transport: httpx.BaseTransport | None = None):
+        check_base_url(base_url)
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._http = httpx.Client(timeout=10.0, transport=transport)

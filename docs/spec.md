@@ -241,6 +241,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 - `cli/bookmgr_cli` に実装するPython製CLI（`argparse`でサブコマンドを定義、`client.py` が `/api/*` を `X-API-Key` ヘッダー認証で呼び出す）。
 - 接続設定は環境変数で受け取る: `BOOKMGR_API_URL`（例: `http://localhost:8080`）, `BOOKMGR_API_KEY`（必須）。
+- `BOOKMGR_API_URL`が平文`http://`の場合、接続先がループバック（`localhost`, `127.0.0.0/8`, `::1`）以外ならAPIキーを平文で送らないよう起動時にエラー終了する（Androidの平文HTTP制限と同じ方針）。
 - サブコマンド:
   | コマンド | 説明 |
   |---|---|
@@ -258,7 +259,7 @@ CREATE INDEX idx_books_author ON books(author);
 - UI: Jetpack Compose + Material3。画面遷移はNavigation Compose。
 - 機能はWeb版と同等: 設定（サーバーURL・APIキー入力、端末内に保存）、一覧・検索（ページング）、詳細表示、新規登録・編集・削除、ISBN入力による書誌情報取得（`GET /api/isbn-lookup`）。
 - 通信: `/api/*` を `X-API-Key` ヘッダー認証で直接呼び出す（Web版と異なりCookieを使わないため、サーバー側の変更は不要）。
-- 設定値の永続化: Jetpack DataStore（Preferences）。APIキーを含むため、`android:allowBackup="false"`と`dataExtractionRules`でクラウドバックアップ・端末間転送の対象から除外する。
+- 設定値の永続化: Jetpack DataStore（Preferences）。APIキーはAndroid KeystoreのAES-256-GCM鍵で暗号化して`api_key_enc`に保存する（旧形式の平文`api_key`は起動時に暗号化して削除する。復号できない場合は未設定扱い）。APIキーを含むため、`android:allowBackup="false"`と`dataExtractionRules`でクラウドバックアップ・端末間転送の対象から除外する。
 - 平文HTTP: `network_security_config.xml`で既定は禁止し、開発用ホスト（`10.0.2.2`, `localhost`, `127.0.0.1`）のみ許可する。それ以外のサーバーにはHTTPSで接続する。
 - 初回起動時、サーバーURL・APIキーが未設定であれば設定画面を表示する。
 
@@ -266,6 +267,6 @@ CREATE INDEX idx_books_author ON books(author);
 
 - テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
-- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。
+- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。
 - 依存パッケージ: `requirements.txt` は動作確認済みのバージョンに`==`で固定する。pytest等の開発用依存は`requirements-dev.txt`に分離する。
-- HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: frame-ancestors 'none'`・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。
+- HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'`（画面のJavaScriptは`static/app.js`に集約し、インラインスクリプト・イベントハンドラ属性は使わない）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。

@@ -18,7 +18,7 @@
 - **サーバーURL**: `bookmgr` サーバーのベースURL。エミュレータからホストマシンのlocalhostへ接続する場合は `http://10.0.2.2:8080` を使う。
 - **APIキー**: サーバーの `API_KEY` 環境変数と同じ値。
 
-設定は端末内（Jetpack DataStore）に保存される。APIキーの漏洩を防ぐため、アプリデータはバックアップ（クラウドバックアップ・端末間転送）の対象外にしている。
+設定は端末内（Jetpack DataStore）に保存される。APIキーはAndroid Keystoreの鍵（AES-256-GCM、端末外へ取り出せない）で暗号化してから保存する。旧バージョンが平文で保存したAPIキーは、起動時に自動で暗号化形式へ移行する。さらに漏洩を防ぐため、アプリデータはバックアップ（クラウドバックアップ・端末間転送）の対象外にしている。Keystoreの鍵が失われた場合（端末の資格情報を消去したときなど）はAPIキーを復号できないため、設定画面で再入力する。
 
 平文HTTPで接続できるのは開発用ホスト（`10.0.2.2`, `localhost`, `127.0.0.1`）のみ。LAN上のIPアドレスやドメインなど、それ以外のサーバーへは `https://` で接続する必要がある（`http://` を指定すると通信がブロックされる）。公開サーバーはルートの README.md の「HTTPS化」の手順でCaddy経由のHTTPSにする。
 
@@ -47,7 +47,7 @@ app/src/main/java/com/bookmgr/android/
     model/          # API JSONのDTO（Book, BookInput, BookInfo等）
     network/         # Retrofit + Moshi + OkHttp（X-API-Keyヘッダー付与）
     BookRepository.kt   # APIクライアントのラッパー、エラーをApiExceptionに変換
-    settings/        # DataStoreによる接続設定の永続化
+    settings/        # DataStoreによる接続設定の永続化（APIキーはKeystoreで暗号化）
   ui/
     BookmgrApp.kt        # 設定要否の分岐
     BookmgrNavHost.kt    # 画面遷移

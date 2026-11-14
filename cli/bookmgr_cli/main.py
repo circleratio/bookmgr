@@ -5,14 +5,14 @@ import json
 import os
 import sys
 
-from .client import APIError, Client
+from .client import APIError, Client, InsecureURLError, check_base_url
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bookmgr-cli",
         description="Environment: BOOKMGR_API_URL (default http://localhost:8080), "
-        "BOOKMGR_API_KEY (required)",
+        "BOOKMGR_API_KEY (required). Remote servers must use https://",
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -147,6 +147,12 @@ def main(argv: list[str] | None = None) -> int:
     api_key = os.environ.get("BOOKMGR_API_KEY")
     if not api_key:
         print("Error: BOOKMGR_API_KEY environment variable is required", file=sys.stderr)
+        return 1
+
+    try:
+        check_base_url(base_url)
+    except InsecureURLError as e:
+        print(f"Error: BOOKMGR_API_URL: {e}", file=sys.stderr)
         return 1
 
     with Client(base_url, api_key) as client:

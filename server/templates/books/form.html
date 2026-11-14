@@ -46,34 +46,4 @@
   </div>
 </form>
 
-{% if is_new %}
-<script>
-document.getElementById('isbn-lookup-button').addEventListener('click', async function () {
-  var isbn = document.getElementById('isbn').value.trim();
-  var msg = document.getElementById('isbn-lookup-message');
-  if (!isbn) {
-    msg.textContent = 'ISBNを入力してください';
-    return;
-  }
-  msg.textContent = '取得中...';
-  try {
-    var res = await fetch('/books/isbn-lookup?isbn=' + encodeURIComponent(isbn));
-    var body = await res.json();
-    if (!res.ok) {
-      msg.textContent = body.error || '取得に失敗しました';
-      return;
-    }
-    var data = body.data;
-    if (data.title) document.getElementById('title').value = data.title;
-    if (data.author) document.getElementById('author').value = data.author;
-    if (data.publisher) document.getElementById('publisher').value = data.publisher;
-    if (data.published_date) document.getElementById('published_date').value = data.published_date;
-    if (data.isbn) document.getElementById('isbn').value = data.isbn;
-    msg.textContent = '取得しました';
-  } catch (e) {
-    msg.textContent = '取得に失敗しました';
-  }
-});
-</script>
-{% endif %}
 {% endblock %}

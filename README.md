@@ -11,7 +11,7 @@ python -m venv .venv
 pip install -r requirements.txt      # テストも実行する場合は requirements-dev.txt
 
 export API_KEY=...                   # 必須（32文字以上。生成例: python -c "import secrets; print(secrets.token_urlsafe(32))"）
-export HOST=0.0.0.0                  # 任意（デフォルト 0.0.0.0。リバースプロキシ配下では127.0.0.1推奨、後述）
+export HOST=127.0.0.1                # 任意（デフォルト 127.0.0.1。他のマシンから直接接続させる場合のみ 0.0.0.0 にする）
 export PORT=8080                     # 任意（デフォルト 8080）
 export DB_PATH=/path/to/bookmgr.db  # 任意（デフォルト <リポジトリルート>/db/bookmgr.db。相対パスは起動時のカレントディレクトリ基準になるため絶対パスで指定する）
 export GOOGLE_BOOKS_API_KEY=...      # 任意（新規登録画面のISBN取得機能で使用。未設定でも動作する）
@@ -52,7 +52,7 @@ python -m app.main
    caddy run --config deploy/Caddyfile
    ```
 
-   `deploy/Caddyfile` はHSTS・`X-Frame-Options`・`Content-Security-Policy: frame-ancestors 'none'`・`X-Content-Type-Options`・`Referrer-Policy` のセキュリティヘッダーを付与する。HSTSを有効にするとブラウザは以後1年間そのドメインへ平文HTTPで接続しなくなるため、HTTPS配信が安定してから運用すること。
+   `deploy/Caddyfile` はHSTS・`X-Frame-Options`・`Content-Security-Policy`（スクリプト・スタイル・通信先を自オリジンに限定し、フレーム埋め込みを禁止）・`X-Content-Type-Options`・`Referrer-Policy` のセキュリティヘッダーを付与する。HSTSを有効にするとブラウザは以後1年間そのドメインへ平文HTTPで接続しなくなるため、HTTPS配信が安定してから運用すること。
 
    画面のPOST（ログイン・登録・更新・削除・ログアウト）はCSRF対策として`Origin`（無ければ`Referer`）ヘッダーが`Host`と一致することを検証する。Caddyの`reverse_proxy`は既定で元の`Host`ヘッダーをそのまま転送するため追加設定は不要だが、`Host`を書き換えるプロキシ設定にすると画面のPOSTがすべて`403`になる。
 
@@ -84,7 +84,7 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows。macOS/Linuxは `source .venv/bin/activate`
 pip install -r requirements.txt      # テストも実行する場合は requirements-dev.txt
 
-export BOOKMGR_API_URL=http://localhost:8080   # 任意（デフォルト http://localhost:8080）
+export BOOKMGR_API_URL=http://localhost:8080   # 任意（デフォルト http://localhost:8080。リモートのサーバーは https:// 必須。平文 http:// はlocalhost/127.0.0.1/::1のみ許可）
 export BOOKMGR_API_KEY=...                     # 必須（サーバーの API_KEY と同じ値）
 
 python -m bookmgr_cli list --q 猫
