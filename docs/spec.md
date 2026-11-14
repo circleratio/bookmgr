@@ -20,6 +20,7 @@ server/
     db.py                 # sqlite3接続・起動時マイグレーション適用
     errors.py             # アプリケーションエラー型とFastAPI例外ハンドラ
     auth.py               # APIキー認証（X-API-Key）・セッションCookie認証
+    middleware.py         # /api/* のAPIキー認証とリクエストボディサイズ上限（ボディ解析前に実行）
     schemas.py            # Pydanticモデル（Book, BookInput, BookInfo）
     template_helpers.py   # Jinja2テンプレート用ヘルパー（stars等）
     repositories/
@@ -98,7 +99,8 @@ CREATE INDEX idx_books_author ON books(author);
 
 - 固定のAPIキーを環境変数（`API_KEY`）で設定する運用とする（利用者テーブルは持たない）。APIキーは32文字以上を必須とし、満たさない場合は起動に失敗する。
 - APIキーの比較は `secrets.compare_digest` で行う。
-- REST APIエンドポイント（`/api/*`）: リクエストヘッダー `X-API-Key` にAPIキーを必須とする。一致しない場合は `401 Unauthorized` を返す。
+- REST APIエンドポイント（`/api/*`）: リクエストヘッダー `X-API-Key` にAPIキーを必須とする。一致しない場合は `401 Unauthorized` を返す。認証はASGIミドルウェア（`RequestGuardMiddleware`）でリクエストボディを読む前に行うため、未認証のリクエストのボディは読み込まれず、検証エラー（項目名を含む`400`）も返らない。
+- リクエストボディの上限: 全エンドポイントで1MiB。`Content-Length`が上限を超える場合は即座に、チャンク転送で上限を超えた場合はその時点で`413 PAYLOAD_TOO_LARGE`を返す。
 - SSR画面（`/`, `/books/*` など）: 未ログイン状態でアクセスすると `/login` にリダイレクトする。
   - `GET /login`: APIキー入力フォームを表示。
   - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。

@@ -182,3 +182,65 @@ def test_settings_default_host_is_loopback(monkeypatch):
     monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
     monkeypatch.delenv("HOST", raising=False)
     assert Settings.from_env().host == "127.0.0.1"
+
+
+def test_api_auth_runs_before_body_parsing(client: TestClient):
+    """Unauthenticated requests must be rejected before the body is read,
+    so a malformed body yields 401 (not a 400 that leaks field names)."""
+    resp = client.post(
+        "/api/books", content=b"{not json", headers={"Content-Type": "application/json"}
+    )
+    assert resp.status_code == 401
+    assert resp.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_api_wrong_key_counts_toward_rate_limit(client: TestClient):
+    for _ in range(10):
+        assert client.get("/api/books", headers={"X-API-Key": "wrong"}).status_code == 401
+    resp = client.get("/api/books", headers=auth_headers())
+    assert resp.status_code == 429
+
+
+def test_oversized_content_length_rejected(client: TestClient):
+    from app.middleware import MAX_BODY_BYTES
+
+    body = b'{"title":"' + b"a" * MAX_BODY_BYTES + b'","author":"x"}'
+    resp = client.post(
+        "/api/books", content=body, headers={**auth_headers(), "Content-Type": "application/json"}
+    )
+    assert resp.status_code == 413
+    assert resp.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
+
+
+def test_oversized_chunked_body_rejected(client: TestClient):
+    from app.middleware import MAX_BODY_BYTES
+
+    def chunks():
+        yield b'{"title":"'
+        for _ in range(MAX_BODY_BYTES // 65536 + 2):
+            yield b"a" * 65536
+        yield b'","author":"x"}'
+
+    resp = client.post(
+        "/api/books", content=chunks(), headers={**auth_headers(), "Content-Type": "application/json"}
+    )
+    assert resp.status_code == 413
+    assert resp.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
+
+
+def test_oversized_login_form_rejected(client: TestClient):
+    from app.middleware import MAX_BODY_BYTES
+
+    resp = client.post(
+        "/login",
+        content=b"api_key=" + b"a" * MAX_BODY_BYTES,
+        headers={**SAME_ORIGIN, "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 413
+
+
+def test_normal_sized_body_accepted(client: TestClient):
+    resp = client.post(
+        "/api/books", json={"title": "t", "author": "a", "memo": "m" * 2000}, headers=auth_headers()
+    )
+    assert resp.status_code == 201

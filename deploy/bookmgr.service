@@ -7,8 +7,9 @@
 # directory holding the SQLite database (see ReadWritePaths below).
 #
 # Settings are read from <PROJECT_ROOT>/bookmgr.env (KEY=value lines, no
-# `export`; see README.md). Keep it owned by root with mode 0640 and group
-# <SERVICE_USER>, since it holds API_KEY.
+# `export`; see README.md). systemd (PID 1, as root) reads it before
+# dropping privileges, so the service user needs no access: keep it
+# root:root with mode 0600, since it holds API_KEY.
 #
 # Install: copy to /etc/systemd/system/bookmgr.service, then
 #   systemctl daemon-reload && systemctl enable --now bookmgr

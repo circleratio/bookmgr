@@ -52,7 +52,7 @@ python -m app.main
    caddy run --config deploy/Caddyfile
    ```
 
-   `deploy/Caddyfile` はHSTS・`X-Frame-Options`・`Content-Security-Policy`（スクリプト・スタイル・通信先を自オリジンに限定し、フレーム埋め込みを禁止）・`X-Content-Type-Options`・`Referrer-Policy` のセキュリティヘッダーを付与する。HSTSを有効にするとブラウザは以後1年間そのドメインへ平文HTTPで接続しなくなるため、HTTPS配信が安定してから運用すること。
+   `deploy/Caddyfile` はHSTS・`X-Frame-Options`・`Content-Security-Policy`（スクリプト・スタイル・通信先を自オリジンに限定し、フレーム埋め込みを禁止）・`X-Content-Type-Options`・`Referrer-Policy` のセキュリティヘッダーを付与する。リクエストボディは1MiBまでに制限する（アプリ側でも同じ上限を設けている）。HSTSを有効にするとブラウザは以後1年間そのドメインへ平文HTTPで接続しなくなるため、HTTPS配信が安定してから運用すること。
 
    画面のPOST（ログイン・登録・更新・削除・ログアウト）はCSRF対策として`Origin`（無ければ`Referer`）ヘッダーが`Host`と一致することを検証する。Caddyの`reverse_proxy`は既定で元の`Host`ヘッダーをそのまま転送するため追加設定は不要だが、`Host`を書き換えるプロキシ設定にすると画面のPOSTがすべて`403`になる。
 
@@ -73,7 +73,7 @@ python -m app.main
    GOOGLE_BOOKS_API_KEY=...
    ```
 
-   APIキーを含むため `sudo chown root:bookmgr bookmgr.env && sudo chmod 0640 bookmgr.env` とする。
+   APIキーを含むため `sudo chown root:root bookmgr.env && sudo chmod 0600 bookmgr.env` とする（`EnvironmentFile` はsystemd本体がroot権限で読み込むため、サービスユーザーに読み取り権限は不要。アプリが乗っ取られてもこのファイルは読まれない）。
 3. `deploy/bookmgr.service` の `<PROJECT_ROOT>` と `<SERVICE_USER>` を書き換えて `/etc/systemd/system/` に配置し、`sudo systemctl daemon-reload && sudo systemctl enable --now bookmgr` で起動する。ログは `journalctl -u bookmgr` で確認できる。
 
 ## CLIクライアント

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 class AppError(Exception):
@@ -55,6 +56,16 @@ class UpstreamError(AppError):
     default_message = "failed to fetch book info"
 
 
+class BodyTooLarge(StarletteHTTPException):
+    """Raised by RequestGuardMiddleware's receive wrapper once a streamed
+    body exceeds the size limit. It subclasses HTTPException because FastAPI
+    re-raises those unchanged while parsing a body (any other exception is
+    turned into a generic 400)."""
+
+    def __init__(self) -> None:
+        super().__init__(status_code=413, detail="request body too large")
+
+
 def _describe_validation_errors(exc: RequestValidationError) -> str:
     """Summarizes validation errors by field location and message only,
     without echoing the submitted input values back to the client."""
@@ -71,6 +82,13 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RedirectToLogin)
     async def handle_redirect_to_login(request: Request, exc: RedirectToLogin) -> RedirectResponse:
         return RedirectResponse("/login", status_code=302)
+
+    @app.exception_handler(BodyTooLarge)
+    async def handle_body_too_large(request: Request, exc: BodyTooLarge) -> JSONResponse:
+        return JSONResponse(
+            status_code=413,
+            content={"error": {"code": "PAYLOAD_TOO_LARGE", "message": "request body too large"}},
+        )
 
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:

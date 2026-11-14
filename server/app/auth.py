@@ -71,15 +71,31 @@ class SessionStore:
         return expires_at is not None and expires_at >= time.monotonic()
 
 
-def require_api_key(request: Request, x_api_key: str | None = Header(default=None)) -> None:
-    """Authenticates REST API requests via the X-API-Key header."""
+def authenticate_api_request(request: Request) -> None:
+    """Authenticates a REST API request via the X-API-Key header, applying
+    the failed-attempt rate limit.
+
+    Called from RequestGuardMiddleware before the request body is read, so
+    unauthenticated clients cannot make the server buffer or parse a body.
+    """
     limiter = request.app.state.login_limiter
     key = client_key(request)
     limiter.check(key)
-    if not verify_api_key(x_api_key, request):
+    if not verify_api_key(request.headers.get("x-api-key"), request):
         limiter.record_failure(key)
         raise UnauthorizedError()
     limiter.record_success(key)
+
+
+def require_api_key(request: Request, x_api_key: str | None = Header(default=None)) -> None:
+    """Defense in depth for /api/* routes: re-verifies the X-API-Key header.
+
+    The primary check (with rate limiting) runs earlier in
+    RequestGuardMiddleware; this only guards against the middleware being
+    removed or misconfigured, so it does not touch the rate limiter.
+    """
+    if not verify_api_key(x_api_key, request):
+        raise UnauthorizedError()
 
 
 class RedirectToLogin(Exception):

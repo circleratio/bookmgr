@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from .config import Settings
 from .db import Database
 from .errors import register_exception_handlers
+from .middleware import RequestGuardMiddleware
 from .auth import SessionStore
 from .rate_limit import LoginRateLimiter
 from .repositories.book_repository import BookRepository
@@ -43,6 +44,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
 
     register_exception_handlers(app)
+    app.add_middleware(RequestGuardMiddleware)
     app.include_router(books_router, prefix="/api")
     app.include_router(isbn_lookup_router, prefix="/api")
     app.include_router(web_auth_router)

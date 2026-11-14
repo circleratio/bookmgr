@@ -31,5 +31,11 @@ bookmgr.example.com {
 		-Server
 	}
 
+	# Reject oversized request bodies at the edge (the app enforces the
+	# same 1 MiB limit itself in RequestGuardMiddleware).
+	request_body {
+		max_size 1MiB
+	}
+
 	reverse_proxy 127.0.0.1:8090
 }
