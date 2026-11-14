@@ -23,6 +23,13 @@ python -m app.main
 
 起動時に `db/migrations/` 配下のSQLが自動適用される（`CREATE TABLE/INDEX IF NOT EXISTS` のため複数回実行しても安全）。
 
+起動用のシェルスクリプトを作る場合は、APIキーをスクリプトに直書きせず、リポジトリルートの `bookmgr.env`（書式は後述の「systemdでの常駐運用」と同じ `KEY=value` 形式。Gitの管理対象外）に設定を書いて読み込む。`chmod 0600 bookmgr.env` として本人以外が読めないようにすること。同じファイルを後からsystemdの `EnvironmentFile` としてそのまま使える。
+
+```sh
+set -a; . ../bookmgr.env; set +a   # server/ から実行する場合。ファイル内の変数をすべて export する
+python -m app.main
+```
+
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
 - 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
