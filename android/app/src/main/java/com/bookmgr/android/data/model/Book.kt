@@ -10,9 +10,9 @@ data class Book(
     val memo: String?,
     val isbn: String?,
     val publisher: String?,
-    @Json(name = "published_date") val publishedDate: String?,
-    @Json(name = "created_at") val createdAt: String,
-    @Json(name = "updated_at") val updatedAt: String,
+    @param:Json(name = "published_date") val publishedDate: String?,
+    @param:Json(name = "created_at") val createdAt: String,
+    @param:Json(name = "updated_at") val updatedAt: String,
 )
 
 data class BookInput(
@@ -22,20 +22,20 @@ data class BookInput(
     val memo: String? = null,
     val isbn: String? = null,
     val publisher: String? = null,
-    @Json(name = "published_date") val publishedDate: String? = null,
+    @param:Json(name = "published_date") val publishedDate: String? = null,
 )
 
 data class BookInfo(
     val title: String,
     val author: String,
     val publisher: String,
-    @Json(name = "published_date") val publishedDate: String,
+    @param:Json(name = "published_date") val publishedDate: String,
     val isbn: String,
 )
 
 data class Pagination(
     val page: Int,
-    @Json(name = "page_size") val pageSize: Int,
+    @param:Json(name = "page_size") val pageSize: Int,
     val total: Int,
 )
 
