@@ -1,12 +1,48 @@
+# systemd unit for the bookmgr FastAPI server.
+#
+# Replace <PROJECT_ROOT> with the absolute path of this repository and
+# <SERVICE_USER> with a dedicated unprivileged account (e.g. create one with
+# `useradd --system --no-create-home --shell /usr/sbin/nologin bookmgr`).
+# That account needs read access to the repository and write access to the
+# directory holding the SQLite database (see ReadWritePaths below).
+#
+# Settings are read from <PROJECT_ROOT>/bookmgr.env (KEY=value lines, no
+# `export`; see README.md). Keep it owned by root with mode 0640 and group
+# <SERVICE_USER>, since it holds API_KEY.
+#
+# Install: copy to /etc/systemd/system/bookmgr.service, then
+#   systemctl daemon-reload && systemctl enable --now bookmgr
+
 [Unit]
-Description=Notebook management service
+Description=bookmgr book management service
 After=network.target
 
 [Service]
+Type=simple
+User=<SERVICE_USER>
+Group=<SERVICE_USER>
+WorkingDirectory=<PROJECT_ROOT>/server
+EnvironmentFile=<PROJECT_ROOT>/bookmgr.env
+ExecStart=<PROJECT_ROOT>/server/.venv/bin/python -m app.main
+Restart=on-failure
+RestartSec=5
 UMask=0077
-Type=oneshot
-ExecStart=<PROJECT_ROOT>/start.sh
-RemainAfterExit=yes
+
+# Sandboxing: the process may only write to the database directory.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=<PROJECT_ROOT>/db
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target

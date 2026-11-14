@@ -4,8 +4,12 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# SQLite runtime database
-db/*.db
+# SQLite runtime database (anywhere in the tree, e.g. server/db/ when
+# DB_PATH is relative and the server is started from server/)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Android (Gradle build output, IDE settings, local SDK path)
 android/.gradle/
@@ -15,4 +19,7 @@ android/local.properties
 
 # Operational tool (it may includes API keys)
 start.sh
+
+# systemd EnvironmentFile (contains API keys)
+bookmgr.env
 

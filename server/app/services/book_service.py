@@ -8,6 +8,9 @@ from ..schemas import Book, BookInput
 
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
+# Upper bound on the page number so the computed OFFSET always fits in
+# SQLite's 64-bit INTEGER (larger values raised OverflowError -> 500).
+MAX_PAGE = 1_000_000
 
 _PUBLISHED_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -95,6 +98,8 @@ class BookService:
     def list(self, query: str, page: int, page_size: int) -> tuple[list[Book], Pagination]:
         if page < 1:
             page = 1
+        if page > MAX_PAGE:
+            page = MAX_PAGE
         if page_size < 1 or page_size > MAX_PAGE_SIZE:
             page_size = DEFAULT_PAGE_SIZE
 

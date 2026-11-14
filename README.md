@@ -13,7 +13,7 @@ pip install -r requirements.txt      # テストも実行する場合は require
 export API_KEY=...                   # 必須（32文字以上。生成例: python -c "import secrets; print(secrets.token_urlsafe(32))"）
 export HOST=0.0.0.0                  # 任意（デフォルト 0.0.0.0。リバースプロキシ配下では127.0.0.1推奨、後述）
 export PORT=8080                     # 任意（デフォルト 8080）
-export DB_PATH=db/bookmgr.db         # 任意（デフォルト db/bookmgr.db、リポジトリルート基準）
+export DB_PATH=/path/to/bookmgr.db  # 任意（デフォルト <リポジトリルート>/db/bookmgr.db。相対パスは起動時のカレントディレクトリ基準になるため絶対パスで指定する）
 export GOOGLE_BOOKS_API_KEY=...      # 任意（新規登録画面のISBN取得機能で使用。未設定でも動作する）
 export COOKIE_SECURE=false           # 任意（デフォルト false。HTTPS配信時はtrueにする、後述）
 
@@ -57,6 +57,24 @@ python -m app.main
    画面のPOST（ログイン・登録・更新・削除・ログアウト）はCSRF対策として`Origin`（無ければ`Referer`）ヘッダーが`Host`と一致することを検証する。Caddyの`reverse_proxy`は既定で元の`Host`ヘッダーをそのまま転送するため追加設定は不要だが、`Host`を書き換えるプロキシ設定にすると画面のPOSTがすべて`403`になる。
 
 4. `https://<ドメイン>` でアクセスできる。CLI・Androidアプリは接続先URLを`https://<ドメイン>`に変更するだけでよく（正規CA発行証明書のため）、クライアント側の追加設定は不要。
+
+## systemdでの常駐運用
+
+`deploy/bookmgr.service` は専用の非特権ユーザーでサーバーを起動し、異常終了時に自動再起動するユニットファイル。書き込みはDBディレクトリ（`<PROJECT_ROOT>/db`）のみに制限している。
+
+1. 専用ユーザーを作成する（例: `sudo useradd --system --no-create-home --shell /usr/sbin/nologin bookmgr`）。このユーザーがリポジトリを読めること、`db/` に書き込めることを確認する。
+2. リポジトリルートに `bookmgr.env` を作成する（`export` は付けず `KEY=value` 形式。Gitの管理対象外）。
+
+   ```sh
+   API_KEY=...
+   HOST=127.0.0.1
+   PORT=8090
+   COOKIE_SECURE=true
+   GOOGLE_BOOKS_API_KEY=...
+   ```
+
+   APIキーを含むため `sudo chown root:bookmgr bookmgr.env && sudo chmod 0640 bookmgr.env` とする。
+3. `deploy/bookmgr.service` の `<PROJECT_ROOT>` と `<SERVICE_USER>` を書き換えて `/etc/systemd/system/` に配置し、`sudo systemctl daemon-reload && sudo systemctl enable --now bookmgr` で起動する。ログは `journalctl -u bookmgr` で確認できる。
 
 ## CLIクライアント
 

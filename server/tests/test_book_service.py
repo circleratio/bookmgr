@@ -154,3 +154,10 @@ def test_delete_not_found():
     svc = BookService(FakeRepo())
     with pytest.raises(NotFoundError):
         svc.delete(999)
+
+
+def test_list_clamps_huge_page(book_repo):
+    from app.services.book_service import MAX_PAGE, BookService
+
+    _, pagination = BookService(book_repo).list("", 10**20, 0)
+    assert pagination.page == MAX_PAGE

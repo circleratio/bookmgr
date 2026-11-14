@@ -133,3 +133,27 @@ def test_settings_rejects_short_api_key(monkeypatch):
 def test_settings_accepts_long_api_key(monkeypatch):
     monkeypatch.setenv("API_KEY", "x" * MIN_API_KEY_LENGTH)
     assert Settings.from_env().api_key == "x" * MIN_API_KEY_LENGTH
+
+
+def test_api_rejects_non_ascii_key_and_counts_failure(client: TestClient):
+    resp = client.get("/api/books", headers={"X-API-Key": "é".encode("latin-1")})
+    assert resp.status_code == 401
+    assert client.app.state.login_limiter.tracked_keys() == 1
+
+
+def test_login_rejects_non_ascii_key(client: TestClient):
+    resp = client.post("/login", data={"api_key": "日本語"}, headers=SAME_ORIGIN)
+    assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("path", ["/api/books?page=99999999999999999999"])
+def test_huge_page_does_not_500(client: TestClient, path: str):
+    resp = client.get(path, headers=auth_headers())
+    assert resp.status_code == 200
+    assert resp.json()["data"] == []
+
+
+def test_web_huge_page_does_not_500(client: TestClient):
+    login(client)
+    resp = client.get("/?page=99999999999999999999")
+    assert resp.status_code == 200

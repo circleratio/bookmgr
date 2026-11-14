@@ -32,7 +32,11 @@ def client_key(request: Request) -> str:
 def verify_api_key(candidate: str | None, request: Request) -> bool:
     if candidate is None:
         return False
-    return secrets.compare_digest(candidate, request.app.state.api_key)
+    # Compare as bytes: compare_digest raises TypeError on non-ASCII str,
+    # which would turn a wrong key into a 500 and skip the failure count.
+    return secrets.compare_digest(
+        candidate.encode("utf-8"), request.app.state.api_key.encode("utf-8")
+    )
 
 
 class SessionStore:
