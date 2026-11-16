@@ -239,6 +239,36 @@ def test_oversized_login_form_rejected(client: TestClient):
     assert resp.status_code == 413
 
 
+# Missing boundary: FastAPI fails to parse this body (400) if it reads it.
+MALFORMED_MULTIPART = {"Content-Type": "multipart/form-data"}
+
+
+@pytest.mark.parametrize("path", ["/books", "/books/1", "/books/1/delete"])
+def test_web_post_without_session_redirects_before_parsing_body(client: TestClient, path: str):
+    resp = client.post(
+        path, content=b"garbage", headers={**SAME_ORIGIN, **MALFORMED_MULTIPART},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login"
+
+
+def test_web_post_with_session_parses_body(client: TestClient):
+    # Counterpart of the test above: with a session the body does get parsed.
+    login(client)
+    resp = client.post(
+        "/books", content=b"garbage", headers={**SAME_ORIGIN, **MALFORMED_MULTIPART},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+
+
+def test_logout_without_session_allowed(client: TestClient):
+    resp = client.post("/logout", headers=SAME_ORIGIN, follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers["location"] == "/login"
+
+
 def test_normal_sized_body_accepted(client: TestClient):
     resp = client.post(
         "/api/books", json={"title": "t", "author": "a", "memo": "m" * 2000}, headers=auth_headers()

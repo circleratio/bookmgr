@@ -1,8 +1,8 @@
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, RedirectResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .auth import authenticate_api_request
+from .auth import SESSION_COOKIE_NAME, authenticate_api_request
 from .errors import AppError, BodyTooLarge
 
 # Largest request body accepted. The biggest legitimate payload is a book
@@ -26,12 +26,31 @@ def _is_api_path(path: str) -> bool:
     return path == API_PREFIX or path.startswith(API_PREFIX + "/")
 
 
+# Web screen requests that may carry a body without a session: the login
+# form itself, and logout (which reads no body and is harmless signed out).
+_SESSIONLESS_WEB_PATHS = frozenset({"/login", "/logout"})
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _requires_web_session(method: str, path: str) -> bool:
+    """True for state-changing web screen requests, whose form body FastAPI
+    would otherwise parse before require_web_session runs."""
+    return (
+        method not in _SAFE_METHODS
+        and not _is_api_path(path)
+        and path not in _SESSIONLESS_WEB_PATHS
+        and not path.startswith("/static/")
+    )
+
+
 class RequestGuardMiddleware:
     """Runs before routing and body parsing (FastAPI parses the body before
     resolving route dependencies), and:
 
-    - authenticates /api/* requests via X-API-Key, so unauthenticated
-      clients never get their body read or validated;
+    - authenticates /api/* requests via X-API-Key, and state-changing web
+      screen requests via the session cookie (redirecting to /login, as
+      require_web_session does), so unauthenticated clients never get their
+      body read or validated;
     - caps the request body at MAX_BODY_BYTES, rejecting an oversized
       Content-Length up front and aborting chunked bodies once they exceed it.
     """
@@ -52,6 +71,10 @@ class RequestGuardMiddleware:
                 authenticate_api_request(request)
             except AppError as exc:
                 await _error_response(exc.status_code, exc.code, exc.message)(scope, receive, send)
+                return
+        elif _requires_web_session(scope["method"], scope["path"]):
+            if not request.app.state.sessions.is_valid(request.cookies.get(SESSION_COOKIE_NAME)):
+                await RedirectResponse("/login", status_code=302)(scope, receive, send)
                 return
 
         content_length = request.headers.get("content-length")

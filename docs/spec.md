@@ -20,7 +20,7 @@ server/
     db.py                 # sqlite3接続・起動時マイグレーション適用
     errors.py             # アプリケーションエラー型とFastAPI例外ハンドラ
     auth.py               # APIキー認証（X-API-Key）・セッションCookie認証
-    middleware.py         # /api/* のAPIキー認証・リクエストボディサイズ上限（ボディ解析前に実行）・セキュリティヘッダー付与
+    middleware.py         # /api/* のAPIキー認証・画面POSTのセッション確認・リクエストボディサイズ上限（ボディ解析前に実行）・セキュリティヘッダー付与
     schemas.py            # Pydanticモデル（Book, BookInput, BookInfo）
     template_helpers.py   # Jinja2テンプレート用ヘルパー（stars等）
     repositories/
@@ -105,7 +105,7 @@ CREATE INDEX idx_books_author ON books(author);
   - `GET /login`: APIキー入力フォームを表示。
   - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時、またはリクエストがHTTPSで届いた場合（信頼するプロキシからの`X-Forwarded-Proto`）は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
   - `POST /logout`: サーバー側のセッションを破棄し、Cookieを削除してログイン画面へリダイレクト。
-  - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはサーバー再起動で全て失効する。
+  - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはサーバー再起動で全て失効する。状態を変更する画面リクエスト（GET/HEAD/OPTIONS以外。`/login`・`/logout`を除く）は、`RequestGuardMiddleware`がリクエストボディを読む前に同じセッション検証を行い、未ログインなら`/login`へリダイレクトする（未認証のクライアントにフォームを解析させないため）。
 - レート制限: APIキー認証（`/api/*`のヘッダー認証・`POST /login`）の失敗をクライアント単位で記録し、5分間に10回失敗すると以後の試行を `429 RATE_LIMITED` で拒否する。認証成功で記録はリセットされる。クライアントはIPv4ではアドレス単位、IPv6では`/64`プレフィックス単位で識別する（アドレスを入れ替えて制限を回避されないため）。
 - CSRF対策: 画面のPOST（`/login`, `/logout`, `/books`, `/books/:id`, `/books/:id/delete`）は`Origin`ヘッダー（無ければ`Referer`）のホスト部が`Host`ヘッダーと一致することを検証し、不一致・どちらも無い場合は`403 FORBIDDEN`を返す（`require_same_origin`）。`SameSite=Lax`と併用する多層防御。
 - FastAPIの自動生成ドキュメント（`/docs`, `/redoc`, `/openapi.json`）は認証なしで公開されるため無効化する。
