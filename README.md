@@ -33,7 +33,7 @@ python -m app.main
 - 画面: `http://localhost:8080/login` からAPIキーでログイン
 - API: `X-API-Key` ヘッダーにAPIキーを付与してアクセス（例: `curl -H "X-API-Key: $API_KEY" http://localhost:8080/api/books`)
 - 新規登録画面ではISBNを入力して「取得」ボタンを押すと、Google Books API から書名・著者・出版社・出版日を取得してフォームに反映できる。
-- `API_KEY` が32文字未満の場合は起動に失敗する。APIキーはREST API・画面ログイン共通の唯一の認証情報のため、十分な長さの乱数を使うこと。
+- `API_KEY` が32文字未満の場合、短い文字列の繰り返し（例: `password` を4回）の場合、使われている文字の種類が少なすぎる場合（例: `aaaa…`、`abcdabcd…`）は起動に失敗する。この確認は明らかに弱いキーを弾くだけで、辞書の単語をつないだキーは検出できない。APIキーはREST API・画面ログイン共通の唯一の認証情報のため、上記の生成例のように乱数で作ること。
 - `/docs`・`/redoc`・`/openapi.json`（FastAPIの自動生成ドキュメント）は無効化している。
 - セキュリティヘッダー（`Content-Security-Policy`・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`）はアプリ自身もすべてのレスポンスに付与するため、Caddyを介さずに起動した場合も有効。HSTSのみHTTPS終端側（Caddy）で付与する。また、静的ファイル（`/static/`）以外のレスポンスには `Cache-Control: no-store` を付与し、画面やAPIの内容をキャッシュさせない。
 - アクセスログ（uvicorn）にはURLのクエリ文字列（検索語・ISBN）が記録される。不要なら `ACCESS_LOG=false` で無効化できる。systemdで運用する場合ログはjournaldに残るため、`/etc/systemd/journald.conf` の `MaxRetentionSec=`（例: `30day`）で保存期間を制限するとよい。

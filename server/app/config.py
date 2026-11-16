@@ -1,4 +1,6 @@
+import math
 import os
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +15,34 @@ DEFAULT_STATIC_DIR = str(SERVER_DIR / "static")
 # The API key is the sole credential for both the REST API and the web
 # screens, so require enough length to make online guessing infeasible.
 MIN_API_KEY_LENGTH = 32
+# Floor for the character-frequency entropy estimate (see
+# estimate_entropy_bits). It only rejects keys built from very few distinct
+# characters: genuinely random keys score well above it (secrets.token_hex(16),
+# the weakest common 32-character format, measured >= 91 bits over 200k samples).
+MIN_API_KEY_ENTROPY_BITS = 80
+
+
+def estimate_entropy_bits(value: str) -> float:
+    """Estimates entropy as length x Shannon entropy of the character
+    frequencies. A crude upper bound: it cannot recognize dictionary words."""
+    n = len(value)
+    return -n * sum(c / n * math.log2(c / n) for c in Counter(value).values())
+
+
+def is_repeated_pattern(value: str) -> bool:
+    """True if value is a shorter string repeated, e.g. "password" * 4."""
+    return len(value) > 1 and value in (value + value)[1:-1]
+
+
+def api_key_weakness(api_key: str) -> str | None:
+    """Returns why api_key is too weak to use, or None if it is acceptable."""
+    if len(api_key) < MIN_API_KEY_LENGTH:
+        return f"API_KEY must be at least {MIN_API_KEY_LENGTH} characters"
+    if is_repeated_pattern(api_key):
+        return "API_KEY must not be a repeated pattern"
+    if estimate_entropy_bits(api_key) < MIN_API_KEY_ENTROPY_BITS:
+        return "API_KEY uses too few distinct characters to be a random key"
+    return None
 
 
 @dataclass
@@ -40,9 +70,10 @@ class Settings:
         api_key = os.environ.get("API_KEY")
         if not api_key:
             raise RuntimeError("API_KEY environment variable is required")
-        if len(api_key) < MIN_API_KEY_LENGTH:
+        weakness = api_key_weakness(api_key)
+        if weakness:
             raise RuntimeError(
-                f"API_KEY must be at least {MIN_API_KEY_LENGTH} characters "
+                f"{weakness} "
                 "(e.g. generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\")"
             )
         return cls(

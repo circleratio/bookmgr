@@ -9,6 +9,9 @@ from .conftest import TEST_API_KEY, auth_headers
 
 SAME_ORIGIN = {"Origin": "http://testserver"}
 
+# Passes the API_KEY strength check in Settings.from_env.
+STRONG_API_KEY = "Zq3v-Rk8wP1tYb6Nf0Lx_Hc9Je2Ug5Ma7Sd4Oi"
+
 
 def login(client: TestClient) -> None:
     resp = client.post(
@@ -130,9 +133,38 @@ def test_settings_rejects_short_api_key(monkeypatch):
         Settings.from_env()
 
 
-def test_settings_accepts_long_api_key(monkeypatch):
-    monkeypatch.setenv("API_KEY", "x" * MIN_API_KEY_LENGTH)
-    assert Settings.from_env().api_key == "x" * MIN_API_KEY_LENGTH
+def test_settings_accepts_strong_api_key(monkeypatch):
+    monkeypatch.setenv("API_KEY", STRONG_API_KEY)
+    assert Settings.from_env().api_key == STRONG_API_KEY
+
+
+@pytest.mark.parametrize(
+    "weak",
+    [
+        "x" * MIN_API_KEY_LENGTH,
+        "ab" * 16,
+        "abcd" * 8,
+        "abc" * 11 + "a",  # not an exact repetition; caught by the entropy floor
+        "password" * 4,
+        "abcdefghijklmnop" * 2,
+        "0123456789" * 4,
+    ],
+)
+def test_settings_rejects_low_entropy_api_key(monkeypatch, weak: str):
+    monkeypatch.setenv("API_KEY", weak)
+    with pytest.raises(RuntimeError):
+        Settings.from_env()
+
+
+def test_random_keys_pass_strength_check():
+    import secrets
+
+    from app.config import api_key_weakness
+
+    for gen in (lambda: secrets.token_urlsafe(32), lambda: secrets.token_hex(16)):
+        for _ in range(2000):
+            key = gen()
+            assert api_key_weakness(key) is None, key
 
 
 def test_api_rejects_non_ascii_key_and_counts_failure(client: TestClient):
@@ -179,7 +211,7 @@ def test_static_app_js_served(client: TestClient):
 
 
 def test_settings_default_host_is_loopback(monkeypatch):
-    monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
+    monkeypatch.setenv("API_KEY", STRONG_API_KEY)
     monkeypatch.delenv("HOST", raising=False)
     assert Settings.from_env().host == "127.0.0.1"
 
@@ -372,7 +404,7 @@ def test_cookie_secure_warning(host: str, cookie_secure: bool, warns: bool):
 
 @pytest.mark.parametrize("raw,expected", [(None, True), ("true", True), ("false", False), ("0", False)])
 def test_settings_access_log(monkeypatch, raw, expected):
-    monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
+    monkeypatch.setenv("API_KEY", STRONG_API_KEY)
     if raw is None:
         monkeypatch.delenv("ACCESS_LOG", raising=False)
     else:
