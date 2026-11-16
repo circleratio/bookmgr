@@ -52,7 +52,7 @@ python -m app.main
    python -m app.main
    ```
 
-   `COOKIE_SECURE`未設定（デフォルト`false`）だとローカルの平文HTTP開発用の挙動のまま。HTTPSで配信するのに`COOKIE_SECURE`を`false`のままにすると、ブラウザからはCookieが送られセッションは機能するが、TLSが外れた場合の保護が働かない。逆に平文HTTPのまま`true`にすると、ブラウザがSecure Cookieを保存せずログインループになるため、必ずセットで切り替えること。
+   `COOKIE_SECURE`未設定（デフォルト`false`）でも、リクエストがHTTPSで届いた場合（Caddy経由。uvicornが信頼するプロキシ＝既定で127.0.0.1からの`X-Forwarded-Proto`で判定し、クライアントは偽装できない）はセッションCookieにSecure属性を付与する。それ以外（平文HTTP）では付与しない。HTTPS配信時は明示的に`COOKIE_SECURE=true`とすることを推奨する。逆に平文HTTPのまま`true`にすると、ブラウザがSecure Cookieを保存せずログインループになるため、必ずHTTPS配信とセットで切り替えること。`HOST`がループバック以外かつ`COOKIE_SECURE`未設定で起動すると、平文HTTPでCookieを配信している可能性がある旨の警告を標準エラーに出力する。
 
 2. `deploy/Caddyfile` の `bookmgr.example.com` を実際のドメインに書き換える（事前にDNSのAレコードをこのサーバーの公開IPに向けておく。ポート80/443を外部に開放する必要がある）。
 

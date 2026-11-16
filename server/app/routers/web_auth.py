@@ -17,6 +17,15 @@ def get_templates(request: Request) -> Jinja2Templates:
     return request.app.state.templates
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Marks the session cookie Secure when COOKIE_SECURE is set, or whenever
+    the request itself arrived over HTTPS, so a forgotten COOKIE_SECURE
+    behind Caddy still yields a Secure cookie. The scheme reflects
+    X-Forwarded-Proto only from uvicorn's trusted proxies (forwarded_allow_ips,
+    127.0.0.1 by default), so clients cannot spoof it."""
+    return request.app.state.cookie_secure or request.url.scheme == "https"
+
+
 @router.get("/login")
 def login_form(request: Request):
     return get_templates(request).TemplateResponse(request, "login.html", {"error": None})
@@ -46,7 +55,7 @@ def login(request: Request, api_key: str = Form(...)):
         path="/",
         httponly=True,
         samesite="lax",
-        secure=request.app.state.cookie_secure,
+        secure=_cookie_secure(request),
         max_age=SESSION_TTL_SECONDS,
     )
     return response
@@ -56,5 +65,11 @@ def login(request: Request, api_key: str = Form(...)):
 def logout(request: Request):
     request.app.state.sessions.revoke(request.cookies.get(SESSION_COOKIE_NAME))
     response = RedirectResponse("/login", status_code=302)
-    response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(
+        SESSION_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=_cookie_secure(request),
+    )
     return response

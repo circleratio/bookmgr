@@ -103,7 +103,7 @@ CREATE INDEX idx_books_author ON books(author);
 - リクエストボディの上限: 全エンドポイントで1MiB。`Content-Length`が上限を超える場合は即座に、チャンク転送で上限を超えた場合はその時点で`413 PAYLOAD_TOO_LARGE`を返す。
 - SSR画面（`/`, `/books/*` など）: 未ログイン状態でアクセスすると `/login` にリダイレクトする。
   - `GET /login`: APIキー入力フォームを表示。
-  - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
+  - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時、またはリクエストがHTTPSで届いた場合（信頼するプロキシからの`X-Forwarded-Proto`）は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
   - `POST /logout`: サーバー側のセッションを破棄し、Cookieを削除してログイン画面へリダイレクト。
   - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはサーバー再起動で全て失効する。
 - レート制限: APIキー認証（`/api/*`のヘッダー認証・`POST /login`）の失敗をクライアント単位で記録し、5分間に10回失敗すると以後の試行を `429 RATE_LIMITED` で拒否する。認証成功で記録はリセットされる。クライアントはIPv4ではアドレス単位、IPv6では`/64`プレフィックス単位で識別する（アドレスを入れ替えて制限を回避されないため）。
@@ -270,7 +270,7 @@ CREATE INDEX idx_books_author ON books(author);
 
 - テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
-- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。`ACCESS_LOG`（任意、既定`true`）で uvicorn のアクセスログを切り替える。
+- 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`がループバック以外で`COOKIE_SECURE`が未設定の場合は起動時に警告を出す。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。`ACCESS_LOG`（任意、既定`true`）で uvicorn のアクセスログを切り替える。
 - セキュリティヘッダー: アプリ（`SecurityHeadersMiddleware`）がすべてのレスポンスにCSP・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`を付与する（Caddyfileと同じ値。HSTSはCaddyのみ）。加えて `/static/` 以外のレスポンス（画面・API）には `Cache-Control: no-store` を付与し、書籍データがブラウザやプロキシのキャッシュに残らないようにする（共有端末でログアウト後に「戻る」で閲覧される等の防止）。静的ファイルはキャッシュ可能なままとする。
 - 依存パッケージ: `requirements.txt` は動作確認済みのバージョンに`==`で固定する。pytest等の開発用依存は`requirements-dev.txt`に分離する。
 - HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'`（画面のJavaScriptは`static/app.js`に集約し、インラインスクリプト・イベントハンドラ属性は使わない）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。

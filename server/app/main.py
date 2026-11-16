@@ -1,3 +1,5 @@
+import ipaddress
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -56,10 +58,36 @@ def create_app(settings: Settings) -> FastAPI:
     return app
 
 
+def cookie_secure_warning(settings: Settings) -> str | None:
+    """Returns a startup warning when the server listens beyond loopback
+    without COOKIE_SECURE, i.e. likely serves the session cookie over plain
+    HTTP to remote clients. Behind Caddy (HOST=127.0.0.1) the cookie is made
+    Secure per request instead (see web_auth._cookie_secure)."""
+    if settings.cookie_secure or _is_loopback_host(settings.host):
+        return None
+    return (
+        f"HOST={settings.host} accepts remote connections but COOKIE_SECURE is not set; "
+        "the session cookie is sent without the Secure attribute over plain HTTP. "
+        "Serve over HTTPS (e.g. behind Caddy) and set COOKIE_SECURE=true."
+    )
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> None:
     import uvicorn
 
     settings = Settings.from_env()
+    warning = cookie_secure_warning(settings)
+    if warning:
+        print(f"WARNING: {warning}", file=sys.stderr)
     app = create_app(settings)
     print(f"listening on {settings.host}:{settings.port}")
     uvicorn.run(app, host=settings.host, port=settings.port, access_log=settings.access_log)

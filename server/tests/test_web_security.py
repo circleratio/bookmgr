@@ -295,6 +295,51 @@ def test_security_headers_match_caddyfile():
         assert f'{name} "{value}"' in caddyfile, name
 
 
+def _login_set_cookie(client: TestClient, origin: str) -> str:
+    resp = client.post(
+        "/login", data={"api_key": TEST_API_KEY}, headers={"Origin": origin}, follow_redirects=False
+    )
+    assert resp.status_code == 302, resp.text
+    return resp.headers["set-cookie"].lower()
+
+
+def test_session_cookie_not_secure_over_plain_http(client: TestClient):
+    assert "secure" not in _login_set_cookie(client, "http://testserver")
+
+
+def test_session_cookie_secure_over_https_without_cookie_secure(client: TestClient):
+    # Behind Caddy, uvicorn sets the scheme from X-Forwarded-Proto, so a
+    # forgotten COOKIE_SECURE must still yield a Secure cookie.
+    client.base_url = "https://testserver"
+    assert "secure" in _login_set_cookie(client, "https://testserver")
+
+
+def test_logout_deletes_cookie_with_matching_attributes(client: TestClient):
+    client.base_url = "https://testserver"
+    _login_set_cookie(client, "https://testserver")
+    resp = client.post("/logout", headers={"Origin": "https://testserver"}, follow_redirects=False)
+    cookie = resp.headers["set-cookie"].lower()
+    assert "max-age=0" in cookie and "secure" in cookie and "httponly" in cookie
+
+
+@pytest.mark.parametrize(
+    "host,cookie_secure,warns",
+    [
+        ("127.0.0.1", False, False),
+        ("localhost", False, False),
+        ("::1", False, False),
+        ("0.0.0.0", True, False),
+        ("0.0.0.0", False, True),
+        ("192.168.1.10", False, True),
+    ],
+)
+def test_cookie_secure_warning(host: str, cookie_secure: bool, warns: bool):
+    from app.main import cookie_secure_warning
+
+    settings = Settings(api_key="k" * MIN_API_KEY_LENGTH, host=host, cookie_secure=cookie_secure)
+    assert (cookie_secure_warning(settings) is not None) is warns
+
+
 @pytest.mark.parametrize("raw,expected", [(None, True), ("true", True), ("false", False), ("0", False)])
 def test_settings_access_log(monkeypatch, raw, expected):
     monkeypatch.setenv("API_KEY", "k" * MIN_API_KEY_LENGTH)
