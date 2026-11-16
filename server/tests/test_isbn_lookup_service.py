@@ -142,6 +142,76 @@ def test_lookup_upstream_error(patch_httpx_get):
         svc.lookup("9780000000000")
 
 
+def test_lookup_non_json_body_is_upstream_error(monkeypatch):
+    import httpx
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        req = httpx.Request("GET", url, params=params)
+        return httpx.Response(200, content=b"<html>oops</html>", request=req)
+
+    monkeypatch.setattr("app.services.isbn_lookup_service.httpx.get", fake_get)
+
+    with pytest.raises(UpstreamError):
+        ISBNLookupService().lookup("9780000000000")
+
+
+@pytest.mark.parametrize("body", [{"items": "x"}, {"items": {"a": 1}}, {"items": 3}])
+def test_lookup_wrongly_shaped_items_is_upstream_error(patch_httpx_get, body):
+    patch_httpx_get(200, body)
+
+    with pytest.raises(UpstreamError):
+        ISBNLookupService().lookup("9780000000000")
+
+
+@pytest.mark.parametrize("body", [[], "x", {}, {"items": None}])
+def test_lookup_body_without_items_is_not_found(patch_httpx_get, body):
+    patch_httpx_get(200, body)
+
+    with pytest.raises(NotFoundError):
+        ISBNLookupService().lookup("9780000000000")
+
+
+def test_lookup_skips_malformed_items_and_fields(patch_httpx_get):
+    patch_httpx_get(
+        200,
+        {
+            "items": [
+                "not-an-object",
+                {"volumeInfo": "not-an-object"},
+                {
+                    "volumeInfo": {
+                        "title": 123,
+                        "authors": "not-a-list",
+                        "publisher": ["x"],
+                        "publishedDate": None,
+                        "industryIdentifiers": "not-a-list",
+                    }
+                },
+                {
+                    "volumeInfo": {
+                        "title": "T",
+                        "authors": ["A", 1, None, "B"],
+                        "publisher": "P",
+                        "publishedDate": "2001",
+                        "industryIdentifiers": [
+                            "x",
+                            {"type": "ISBN_13", "identifier": 9780000000000},
+                            {"type": "ISBN_10", "identifier": "0000000000"},
+                        ],
+                    }
+                },
+            ]
+        },
+    )
+
+    info = ISBNLookupService().lookup("9780000000000")
+    assert info.title == "T"
+    assert info.author == "A,B"
+    assert info.publisher == "P"
+    assert info.published_date == "2001-01-01"
+    assert info.isbn == "0000000000"
+
+
 def test_lookup_api_key_passed_as_header(patch_httpx_get):
     capture: dict = {}
     patch_httpx_get(

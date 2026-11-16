@@ -234,7 +234,7 @@ CREATE INDEX idx_books_author ON books(author);
 - サーバー側は `server/app/services/isbn_lookup_service.py` の `ISBNLookupService` が Google Books API（`https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}`）を呼び出す。検索結果には同じ書籍でもメタデータの充実度が異なる複数の候補（`items`）が含まれることがあるため、全候補を走査し各項目（書名・著者・出版社・出版日）で最初に見つかった非空の値を採用する。著者は複数著者を`,`区切りで連結する。ISBNは`ISBN_13`優先、無ければ`ISBN_10`、それも無ければ入力値を使う。
 - 取得成功時: `200 { "data": { "title", "author", "publisher", "published_date", "isbn" } }`。フロントエンドJSが該当フォーム項目（書名・著者・出版社・出版日・ISBN）に反映する。評価・メモはGoogle Books側に無いため対象外。
 - 該当書籍が見つからない場合: `404 { "error": "..." }`。
-- APIキー未指定・不正な場合や外部API呼び出し失敗時: `400`/`502` 相当のエラーJSON。
+- APIキー未指定・不正な場合や外部API呼び出し失敗時（通信エラー、200以外のステータス、JSONでない・想定外の形の応答）: `400`/`502` 相当のエラーJSON。
 - 入力ISBNはハイフンを除いて13桁の数字、または9桁の数字＋数字/`X`の10桁であることを検証し、満たさない場合は`400`を返す（任意の検索語がGoogle Booksのクエリに混入しないようにするため）。
 - Google BooksのAPIキー（`GOOGLE_BOOKS_API_KEY`）は任意。設定時のみ`X-Goog-Api-Key`リクエストヘッダーとして付与する（URLに含めるとHTTPクライアントのログ等に残るため、クエリパラメータは使わない。未設定でも動作する）。
 - `publishedDate`が年のみ（`YYYY`）や年月のみ（`YYYY-MM`）の場合は、フォームの`date`入力欄に収まるよう`-01-01`/`-01`を補って`YYYY-MM-DD`に正規化する。

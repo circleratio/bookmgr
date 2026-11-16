@@ -23,6 +23,12 @@ def _normalize_published_date(d: str) -> str:
     return d
 
 
+def _str_field(obj: dict, key: str) -> str:
+    """Returns obj[key] if it is a string, else "" (treated as missing)."""
+    value = obj.get(key)
+    return value if isinstance(value, str) else ""
+
+
 class ISBNLookupService:
     """Client for the Google Books API. api_key may be empty (the API works
     unauthenticated, with lower rate limits). base_url may be overridden in
@@ -63,8 +69,19 @@ class ISBNLookupService:
             )
             raise UpstreamError()
 
-        parsed = resp.json()
-        items = parsed.get("items") or []
+        # The upstream body is untrusted: a non-JSON or wrongly shaped body
+        # is an upstream failure (502), not an internal error (500).
+        try:
+            parsed = resp.json()
+        except ValueError as exc:
+            logger.warning("isbn lookup failed: isbn=%r err=invalid JSON", isbn)
+            raise UpstreamError() from exc
+        items = parsed.get("items") if isinstance(parsed, dict) else None
+        if items is None:
+            items = []
+        if not isinstance(items, list):
+            logger.warning("isbn lookup failed: isbn=%r err=unexpected response shape", isbn)
+            raise UpstreamError()
         if not items:
             raise NotFoundError("no book found for isbn")
 
@@ -74,23 +91,33 @@ class ISBNLookupService:
         # title/authors but no publisher or date, while a later item does.
         # Merge fields across all returned items instead of trusting
         # items[0] alone, keeping the first non-empty value seen per field.
+        # Items or fields of an unexpected type are skipped as if missing.
         title = author = publisher = published_date = ""
         isbn_13 = isbn_10 = ""
         for item in items:
-            v = item.get("volumeInfo", {})
-            if not title and v.get("title"):
-                title = v["title"]
-            if not author and v.get("authors"):
-                author = ",".join(v["authors"])
-            if not publisher and v.get("publisher"):
-                publisher = v["publisher"]
-            if not published_date and v.get("publishedDate"):
-                published_date = v["publishedDate"]
-            for ident in v.get("industryIdentifiers", []):
+            v = item.get("volumeInfo") if isinstance(item, dict) else None
+            if not isinstance(v, dict):
+                continue
+            if not title:
+                title = _str_field(v, "title")
+            if not author:
+                authors = v.get("authors")
+                if isinstance(authors, list):
+                    author = ",".join(a for a in authors if isinstance(a, str) and a)
+            if not publisher:
+                publisher = _str_field(v, "publisher")
+            if not published_date:
+                published_date = _str_field(v, "publishedDate")
+            identifiers = v.get("industryIdentifiers")
+            if not isinstance(identifiers, list):
+                continue
+            for ident in identifiers:
+                if not isinstance(ident, dict):
+                    continue
                 if ident.get("type") == "ISBN_13" and not isbn_13:
-                    isbn_13 = ident.get("identifier", "")
+                    isbn_13 = _str_field(ident, "identifier")
                 elif ident.get("type") == "ISBN_10" and not isbn_10:
-                    isbn_10 = ident.get("identifier", "")
+                    isbn_10 = _str_field(ident, "identifier")
 
         result_isbn = isbn_13 or isbn_10 or normalized
 
