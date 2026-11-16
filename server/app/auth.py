@@ -9,7 +9,10 @@ from fastapi import Header, Request
 from .errors import ForbiddenError, UnauthorizedError
 
 SESSION_COOKIE_NAME = "session"
+# Absolute lifetime from login, also used as the cookie's Max-Age.
 SESSION_TTL_SECONDS = 30 * 24 * 60 * 60  # 30 days
+# A session unused for this long expires before reaching its absolute lifetime.
+SESSION_IDLE_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
 def client_key(request: Request) -> str:
@@ -40,12 +43,22 @@ def verify_api_key(candidate: str | None, request: Request) -> bool:
 
 
 class SessionStore:
-    """In-memory session tokens with expiry, safe for concurrent access from
-    FastAPI's thread pool."""
+    """In-memory session tokens, safe for concurrent access from FastAPI's
+    thread pool.
+
+    A session expires SESSION_TTL_SECONDS after login, or earlier once it has
+    gone unused for SESSION_IDLE_SECONDS. Each successful validation counts
+    as use and restarts the idle timer.
+    """
 
     def __init__(self) -> None:
-        self._sessions: dict[str, float] = {}
+        # token -> (absolute expiry, last use), both on the monotonic clock.
+        self._sessions: dict[str, tuple[float, float]] = {}
         self._lock = threading.Lock()
+
+    @staticmethod
+    def _is_live(expires_at: float, last_used: float, now: float) -> bool:
+        return now <= expires_at and now - last_used <= SESSION_IDLE_SECONDS
 
     def create(self) -> str:
         """Issue a random session token, independent of the API key itself."""
@@ -53,9 +66,9 @@ class SessionStore:
         now = time.monotonic()
         with self._lock:
             # Prune expired sessions so the store does not grow without bound.
-            for t in [t for t, exp in self._sessions.items() if exp < now]:
+            for t in [t for t, s in self._sessions.items() if not self._is_live(*s, now)]:
                 del self._sessions[t]
-            self._sessions[token] = now + SESSION_TTL_SECONDS
+            self._sessions[token] = (now + SESSION_TTL_SECONDS, now)
         return token
 
     def revoke(self, token: str | None) -> None:
@@ -66,9 +79,17 @@ class SessionStore:
     def is_valid(self, token: str | None) -> bool:
         if not token:
             return False
+        now = time.monotonic()
         with self._lock:
-            expires_at = self._sessions.get(token)
-        return expires_at is not None and expires_at >= time.monotonic()
+            session = self._sessions.get(token)
+            if session is None:
+                return False
+            expires_at, last_used = session
+            if not self._is_live(expires_at, last_used, now):
+                del self._sessions[token]
+                return False
+            self._sessions[token] = (expires_at, now)
+        return True
 
 
 def authenticate_api_request(request: Request) -> None:

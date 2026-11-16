@@ -103,9 +103,9 @@ CREATE INDEX idx_books_author ON books(author);
 - リクエストボディの上限: 全エンドポイントで1MiB。`Content-Length`が上限を超える場合は即座に、チャンク転送で上限を超えた場合はその時点で`413 PAYLOAD_TOO_LARGE`を返す。
 - SSR画面（`/`, `/books/*` など）: 未ログイン状態でアクセスすると `/login` にリダイレクトする。
   - `GET /login`: APIキー入力フォームを表示。
-  - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時、またはリクエストがHTTPSで届いた場合（信頼するプロキシからの`X-Forwarded-Proto`）は`Secure`、有効期限30日）に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
+  - `POST /login`: 入力されたAPIキーを検証し、一致すればAPIキーとは無関係なランダムなセッショントークン（`secrets.token_urlsafe(32)`）を発行してCookie（`session`、`HttpOnly`, `SameSite=Lax`、`COOKIE_SECURE=true`時、またはリクエストがHTTPSで届いた場合（信頼するプロキシからの`X-Forwarded-Proto`）は`Secure`、有効期限はログインから30日（Cookieの`Max-Age`も30日））に保存し、トップページへリダイレクト。不一致ならエラーメッセージ付きでログイン画面を再表示。
   - `POST /logout`: サーバー側のセッションを破棄し、Cookieを削除してログイン画面へリダイレクト。
-  - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはサーバー再起動で全て失効する。状態を変更する画面リクエスト（GET/HEAD/OPTIONS以外。`/login`・`/logout`を除く）は、`RequestGuardMiddleware`がリクエストボディを読む前に同じセッション検証を行い、未ログインなら`/login`へリダイレクトする（未認証のクライアントにフォームを解析させないため）。
+  - 画面用の依存関数（`require_web_session`）はCookieのトークンがサーバー側のセッションストア（`SessionStore`、メモリ上に保持）に存在し期限内であるかを検証する。セッションはログインから30日（絶対期限）、または最後の利用から7日間利用がない場合（アイドル期限）に失効する。検証に成功するたびにアイドル期限の起点を更新する。セッションはサーバー再起動で全て失効する。状態を変更する画面リクエスト（GET/HEAD/OPTIONS以外。`/login`・`/logout`を除く）は、`RequestGuardMiddleware`がリクエストボディを読む前に同じセッション検証を行い、未ログインなら`/login`へリダイレクトする（未認証のクライアントにフォームを解析させないため）。
 - レート制限: APIキー認証（`/api/*`のヘッダー認証・`POST /login`）の失敗をクライアント単位で記録し、5分間に10回失敗すると以後の試行を `429 RATE_LIMITED` で拒否する。認証成功で記録はリセットされる。クライアントはIPv4ではアドレス単位、IPv6では`/64`プレフィックス単位で識別する（アドレスを入れ替えて制限を回避されないため）。
 - CSRF対策: 画面のPOST（`/login`, `/logout`, `/books`, `/books/:id`, `/books/:id/delete`）は`Origin`ヘッダー（無ければ`Referer`）のホスト部が`Host`ヘッダーと一致することを検証し、不一致・どちらも無い場合は`403 FORBIDDEN`を返す（`require_same_origin`）。`SameSite=Lax`と併用する多層防御。
 - FastAPIの自動生成ドキュメント（`/docs`, `/redoc`, `/openapi.json`）は認証なしで公開されるため無効化する。
