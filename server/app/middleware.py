@@ -111,9 +111,18 @@ _SECURITY_HEADERS_RAW = [
     for name, value in SECURITY_HEADERS.items()
 ]
 
+# Sent on every response except static assets, so book data and screens are
+# not kept in browser or proxy caches (e.g. viewable via Back after logout on
+# a shared device). Static assets hold no user data and stay cacheable, which
+# is why this is not part of SECURITY_HEADERS (mirrored at the Caddy edge for
+# all paths).
+STATIC_PREFIX = "/static/"
+_NO_STORE_RAW = (b"cache-control", b"no-store")
+
 
 class SecurityHeadersMiddleware:
-    """Adds SECURITY_HEADERS to every HTTP response that does not already set them.
+    """Adds SECURITY_HEADERS to every HTTP response that does not already set
+    them, plus Cache-Control: no-store outside STATIC_PREFIX.
 
     HSTS is intentionally left to the TLS-terminating proxy: the app itself
     speaks plain HTTP and cannot tell whether it is reached over HTTPS.
@@ -127,11 +136,15 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
+        no_store = not scope["path"].startswith(STATIC_PREFIX)
+
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 present = {name.lower() for name, _ in headers}
                 headers.extend(h for h in _SECURITY_HEADERS_RAW if h[0] not in present)
+                if no_store and _NO_STORE_RAW[0] not in present:
+                    headers.append(_NO_STORE_RAW)
                 message = {**message, "headers": headers}
             await send(message)
 

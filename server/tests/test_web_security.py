@@ -261,6 +261,29 @@ def test_security_headers_not_duplicated(client: TestClient):
     assert len(resp.headers.get_list("content-security-policy")) == 1
 
 
+@pytest.mark.parametrize("path", ["/login", "/api/books"])
+def test_no_store_on_dynamic_responses(client: TestClient, path: str):
+    resp = client.get(path)  # /api/books without a key -> early 401 from middleware
+    assert resp.headers.get("cache-control") == "no-store"
+
+
+def test_no_store_on_authenticated_pages(client: TestClient):
+    login(client)
+    for path in ["/", "/books/new"]:
+        resp = client.get(path, follow_redirects=False)
+        assert resp.status_code == 200, path
+        assert resp.headers.get("cache-control") == "no-store", path
+    resp = client.get("/api/books", headers=auth_headers())
+    assert resp.status_code == 200
+    assert resp.headers.get("cache-control") == "no-store"
+
+
+def test_static_assets_stay_cacheable(client: TestClient):
+    resp = client.get("/static/style.css")
+    assert resp.status_code == 200
+    assert "no-store" not in resp.headers.get("cache-control", "")
+
+
 def test_security_headers_match_caddyfile():
     """The app and deploy/Caddyfile must send the same header values."""
     from pathlib import Path

@@ -271,6 +271,6 @@ CREATE INDEX idx_books_author ON books(author);
 - テスト: `server/tests`・`cli/tests`（いずれもpytest）を中心にユニットテスト・ハンドラテストを整備する。
 - マイグレーション: `db/migrations/0001_create_books.sql` を起動時に適用する。
 - 設定: `API_KEY`, `HOST`, `PORT`, `DB_PATH`, `GOOGLE_BOOKS_API_KEY`（任意）, `COOKIE_SECURE`（任意）を環境変数で受け取る。`HOST`の既定値は`127.0.0.1`（ループバックのみ）。`ACCESS_LOG`（任意、既定`true`）で uvicorn のアクセスログを切り替える。
-- セキュリティヘッダー: アプリ（`SecurityHeadersMiddleware`）がすべてのレスポンスにCSP・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`を付与する（Caddyfileと同じ値。HSTSはCaddyのみ）。
+- セキュリティヘッダー: アプリ（`SecurityHeadersMiddleware`）がすべてのレスポンスにCSP・`X-Frame-Options`・`X-Content-Type-Options`・`Referrer-Policy`を付与する（Caddyfileと同じ値。HSTSはCaddyのみ）。加えて `/static/` 以外のレスポンス（画面・API）には `Cache-Control: no-store` を付与し、書籍データがブラウザやプロキシのキャッシュに残らないようにする（共有端末でログアウト後に「戻る」で閲覧される等の防止）。静的ファイルはキャッシュ可能なままとする。
 - 依存パッケージ: `requirements.txt` は動作確認済みのバージョンに`==`で固定する。pytest等の開発用依存は`requirements-dev.txt`に分離する。
 - HTTPS配信: `deploy/Caddyfile`でTLS終端し、HSTS・`X-Frame-Options: DENY`・`Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'`（画面のJavaScriptは`static/app.js`に集約し、インラインスクリプト・イベントハンドラ属性は使わない）・`X-Content-Type-Options: nosniff`・`Referrer-Policy: same-origin`を付与する。
