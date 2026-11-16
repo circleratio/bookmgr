@@ -44,6 +44,16 @@ class BookRepository(private val api: ApiService) {
     }
 
     private fun toApiException(response: Response<*>): ApiException {
+        // Redirects are deliberately not followed (see createApiService), so
+        // point the user at the server URL setting instead of a raw body.
+        if (response.code() in 300..399) {
+            val location = response.headers()["Location"] ?: "(none)"
+            return ApiException(
+                response.code(),
+                "REDIRECT_NOT_FOLLOWED",
+                "server responded with a redirect to $location; check the server URL in Settings",
+            )
+        }
         val errorBody = response.errorBody()?.string()
         val parsed = errorBody?.let { runCatching { errorAdapter.fromJson(it) }.getOrNull() }
         return ApiException(

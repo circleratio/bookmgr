@@ -27,8 +27,14 @@ fun createApiService(baseUrl: String, apiKey: String): ApiService {
         chain.proceed(request)
     }
 
+    // Redirects are not followed: OkHttp strips only Authorization on a
+    // cross-host redirect, so following one would send X-API-Key to the new
+    // host. The server never redirects API requests (matching the CLI, which
+    // does not follow redirects either); a 3xx surfaces as an ApiException.
     val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(authInterceptor)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
