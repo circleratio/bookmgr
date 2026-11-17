@@ -1,0 +1,40 @@
+# systemd *user* unit for the bookmgr FastAPI server (runs as your own
+# account, no root needed). For a dedicated service account, use
+# bookmgr.service instead.
+#
+# Assumes the repository lives at ~/services/bookmgr (%h = home directory);
+# adjust the paths below otherwise. ReadWritePaths must match the directory
+# of DB_PATH in bookmgr.env.
+#
+# Settings are read from bookmgr.env (KEY=value lines, no `export`). The user
+# manager reads it with your own privileges, so keep it owned by you, mode 0600.
+#
+# Install:
+#   cp deploy/bookmgr.user.service ~/.config/systemd/user/bookmgr.service
+#   systemctl --user daemon-reload && systemctl --user enable --now bookmgr
+#   sudo loginctl enable-linger $USER   # keep running without a login session
+
+[Unit]
+Description=bookmgr book management service
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/services/bookmgr/server
+EnvironmentFile=%h/services/bookmgr/bookmgr.env
+ExecStart=%h/services/bookmgr/server/.venv/bin/python -m app.main
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+# Sandboxing: the process may only write to the database directory.
+# Requires unprivileged user namespaces; remove this block if the unit fails
+# to start with a namespace-related error.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/services/bookmgr/server/db
+PrivateTmp=yes
+
+[Install]
+WantedBy=default.target

@@ -86,6 +86,39 @@ python -m app.main
    APIキーを含むため `sudo chown root:root bookmgr.env && sudo chmod 0600 bookmgr.env` とする（`EnvironmentFile` はsystemd本体がroot権限で読み込むため、サービスユーザーに読み取り権限は不要。アプリが乗っ取られてもこのファイルは読まれない）。
 3. `deploy/bookmgr.service` の `<PROJECT_ROOT>` と `<SERVICE_USER>` を書き換えて `/etc/systemd/system/` に配置し、`sudo systemctl daemon-reload && sudo systemctl enable --now bookmgr` で起動する。ログは `journalctl -u bookmgr` で確認できる。
 
+### ユーザー権限で動かす場合（systemdユーザーユニット）
+
+専用ユーザーを作らず、自分のアカウントのsystemd（`systemctl --user`）でサーバーを常駐させることもできる。root権限が要るのは初回の `enable-linger` だけ。ユニットファイルは `deploy/bookmgr.user.service`。リポジトリが `~/services/bookmgr` にある前提で書いてあるので、違う場所に置く場合はパスを書き換える（`%h` はホームディレクトリに置き換わる）。
+
+1. 依存パッケージをvenvに入れる（初回と `requirements.txt` を更新したときだけ。ユニット側ではインストールしない）。
+
+   ```sh
+   cd server
+   python3 -m venv .venv
+   .venv/bin/pip install -r requirements.txt
+   ```
+
+2. リポジトリルートに `bookmgr.env` を作る（書式は上と同じ）。ユーザーユニットでは自分の権限で読み込まれるので、所有者は自分のままにして `chmod 0600 bookmgr.env` とする（root所有にすると読めずに起動に失敗する）。システムユニット方式と違って、アプリが乗っ取られた場合にこのファイルを読まれるのは防げない。
+3. ユニットの `ReadWritePaths` を、`DB_PATH` で指定したDBファイルのあるディレクトリに合わせる（デフォルトは `server/db`）。
+4. ユニットを配置して起動する。
+
+   ```sh
+   mkdir -p ~/.config/systemd/user
+   cp deploy/bookmgr.user.service ~/.config/systemd/user/bookmgr.service
+   systemctl --user daemon-reload
+   systemctl --user enable --now bookmgr
+   sudo loginctl enable-linger $USER   # ログアウト中やOS起動直後も動かすために必要（初回のみ）
+   ```
+
+   状態は `systemctl --user status bookmgr`、ログは `journalctl --user -u bookmgr` で確認できる。設定を変えたら `systemctl --user restart bookmgr` で反映する。
+
+注意点:
+
+- `[Install]` には `WantedBy=default.target` を指定する。`multi-user.target` はユーザー用のsystemdには存在しないので、指定しても自動起動されない。
+- `Type=simple` にしてpythonを直接起動する。`start.sh` のようにバックグラウンド（`&`）で起動して終了するスクリプトを `Type=oneshot` で動かすと、サーバーがsystemdの管理から外れてしまい、異常終了しても自動再起動されず、`systemctl --user stop` でも止まらなくなる。
+- サンドボックス設定（`ProtectSystem` など）は、unprivileged user namespace（一般ユーザーが使える名前空間機能）が有効でないとユーザーユニットでは動かない。名前空間関係のエラーで起動に失敗する場合は、ユニット内のこのブロックを削除する。
+- 1024番未満のポートでは待ち受けできない。外部への公開は前述のCaddy経由で行う。
+
 ## CLIクライアント
 
 ```sh
