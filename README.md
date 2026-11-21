@@ -235,6 +235,48 @@ sudo systemctl restart bookmgr
 - サンドボックス設定（`ProtectSystem` など）は、unprivileged user namespace（一般ユーザーが使える名前空間機能）が有効でないとユーザーユニットでは動かない。名前空間関係のエラーで起動に失敗する場合は、ユニット内のこのブロックを削除する。
 - 1024番未満のポートでは待ち受けできない。外部への公開は前述のCaddy経由で行う。
 
+## バックアップ
+
+`python -m app.backup`（`server/` から実行）は、SQLiteのオンラインバックアップ機能（サーバーを止めずに、書き込み中でも一貫した状態を複製する仕組み）でDBを複製する。複製したファイルに整合性チェック（`PRAGMA integrity_check`）をかけ、問題がなければ `bookmgr-YYYYMMDD-HHMMSS.db` という名前で保存し、新しいものから指定した数だけ残して古いものを削除する。元のDBは読み取り専用で開くので、バックアップ処理がDBを変更することはない。
+
+| 環境変数 | 既定値 | 説明 |
+| --- | --- | --- |
+| `DB_PATH` | サーバーと同じ（`db/bookmgr.db`） | バックアップ元のDB |
+| `BACKUP_DIR` | DBと同じディレクトリの `backups/` | 保存先（無ければ権限 `0700` で作成） |
+| `BACKUP_KEEP` | `14` | 残すバックアップの数 |
+
+### systemd timerで毎日取る
+
+専用ユーザー構成では、`deploy/bookmgr-backup.timer` が毎日3:45頃（最大10分のランダムな遅れあり）に `deploy/bookmgr-backup.service` を起動し、`/var/lib/bookmgr/backups` に14世代を残す。処理は `bookmgr` ユーザーで、ネットワークを使えない状態で動く。APIキーは不要なので `bookmgr.env` は読み込まない。その時刻にマシンが止まっていた場合は、次の起動時に実行される（`Persistent=true`）。
+
+`app/backup.py` は「コードの更新」の rsync で `/opt/bookmgr/server` に配置される。配置してから次を実行する。
+
+```sh
+sudo cp deploy/bookmgr-backup.service deploy/bookmgr-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now bookmgr-backup.timer
+
+# Run a backup right away and check the result
+sudo systemctl start bookmgr-backup.service
+sudo journalctl -u bookmgr-backup -n 20
+sudo ls -l /var/lib/bookmgr/backups
+```
+
+次回の実行予定は `systemctl list-timers bookmgr-backup.timer` で確認できる。時刻や残す数を変えるときは `/etc/systemd/system/` のファイルを編集し、`sudo systemctl daemon-reload` を実行する。
+
+### バックアップから戻す
+
+```sh
+sudo systemctl stop bookmgr
+sudo -u bookmgr cp /var/lib/bookmgr/bookmgr.db /var/lib/bookmgr/bookmgr.db.before-restore
+sudo -u bookmgr cp /var/lib/bookmgr/backups/bookmgr-YYYYMMDD-HHMMSS.db /var/lib/bookmgr/bookmgr.db
+sudo systemctl start bookmgr
+```
+
+### 注意
+
+バックアップはDBと同じディスクに保存されるため、ディスク故障やサーバーそのものを失った場合には役に立たない。重要なデータであれば、`/var/lib/bookmgr/backups` を定期的に別のマシンやストレージへコピーする。
+
 ## CLIクライアント
 
 ```sh

@@ -1,0 +1,14 @@
+# Daily backup of the bookmgr database (see bookmgr-backup.service).
+
+[Unit]
+Description=Daily backup of the bookmgr database
+
+[Timer]
+# 15 minutes after the bnote backup on the same host, to spread disk I/O.
+OnCalendar=*-*-* 03:45:00
+RandomizedDelaySec=10min
+# Run a missed backup at the next boot if the machine was off at 03:45.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
