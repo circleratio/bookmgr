@@ -70,25 +70,141 @@ python -m app.main
 
 ## systemdでの常駐運用
 
-`deploy/bookmgr.service` は専用の非特権ユーザーでサーバーを起動し、異常終了時に自動再起動するユニットファイル。書き込みはDBディレクトリ（`<PROJECT_ROOT>/db`）のみに制限している。
+### 専用ユーザーで動かす場合（推奨）
 
-1. 専用ユーザーを作成する（例: `sudo useradd --system --no-create-home --shell /usr/sbin/nologin bookmgr`）。このユーザーがリポジトリを読めること、`db/` に書き込めることを確認する。
-2. リポジトリルートに `bookmgr.env` を作成する（`export` は付けず `KEY=value` 形式。Gitの管理対象外）。
+`deploy/bookmgr.service` は、ログインできない専用のシステムユーザー `bookmgr` でサーバーを起動し、異常終了時に自動再起動するシステムユニット。自分のアカウント（sudoやdockerを使えるユーザー）で動かすと、アプリが乗っ取られたときにその権限まで奪われるため、本番ではこの方式を使う。
 
-   ```sh
-   API_KEY=...
-   HOST=127.0.0.1
-   PORT=8090
-   COOKIE_SECURE=true
-   GOOGLE_BOOKS_API_KEY=...
-   ```
+配置は次のとおり。
 
-   APIキーを含むため `sudo chown root:root bookmgr.env && sudo chmod 0600 bookmgr.env` とする（`EnvironmentFile` はsystemd本体がroot権限で読み込むため、サービスユーザーに読み取り権限は不要。アプリが乗っ取られてもこのファイルは読まれない）。
-3. `deploy/bookmgr.service` の `<PROJECT_ROOT>` と `<SERVICE_USER>` を書き換えて `/etc/systemd/system/` に配置し、`sudo systemctl daemon-reload && sudo systemctl enable --now bookmgr` で起動する。ログは `journalctl -u bookmgr` で確認できる。
+| 用途 | 場所 | 所有者・権限 |
+| --- | --- | --- |
+| サーバーのコード・venv | `/opt/bookmgr/server` | `root:root`（サービスからは読み取り専用） |
+| マイグレーション | `/opt/bookmgr/db/migrations` | `root:root`（読み取り専用） |
+| 設定（APIキーを含む） | `/etc/bookmgr/bookmgr.env` | `root:root`、`0600` |
+| DB | `/var/lib/bookmgr/bookmgr.db` | `bookmgr:bookmgr`（ディレクトリ `0700`、ファイル `0600`） |
+
+- マイグレーションのディレクトリは `server/app/config.py` からの相対位置（リポジトリルートの `db/migrations`）で決まるため、`server/` と `db/` は同じディレクトリの下に並べて置く。
+- `bookmgr.env` は、systemd本体（PID 1）がroot権限で読み込んでから実行ユーザーを切り替える。サービスユーザーには読み取り権限が不要で、アプリが乗っ取られてもこのファイルは読まれない。
+- `/var/lib/bookmgr` は、ユニットの `StateDirectory=bookmgr` により、起動のたびに所有者 `bookmgr`・権限 `0700` に保たれる。書き込めるのはこのディレクトリだけ。
+- Google Books APIへHTTPSで接続するため、外向きの通信は制限していない（bnoteのような `IPAddressDeny` は付けられない）。
+
+#### 新規インストール
+
+リポジトリのルートで実行する。
+
+```sh
+# 1. Create the dedicated user (no login, no home directory)
+sudo useradd --system --user-group --no-create-home \
+  --home-dir /nonexistent --shell /usr/sbin/nologin bookmgr
+
+# 2. Deploy the server code and migrations as root-owned, read-only files
+sudo install -d -o root -g root -m 755 /opt/bookmgr /opt/bookmgr/db
+sudo rsync -a --delete --chown=root:root \
+  --exclude .venv --exclude db --exclude tests --exclude .pytest_cache \
+  --exclude start.sh --exclude '__pycache__' --exclude '*.swp' \
+  server/ /opt/bookmgr/server/
+sudo rsync -a --delete --chown=root:root db/migrations/ /opt/bookmgr/db/migrations/
+sudo python3 -m venv /opt/bookmgr/server/.venv
+sudo /opt/bookmgr/server/.venv/bin/pip install -r /opt/bookmgr/server/requirements.txt
+sudo /opt/bookmgr/server/.venv/bin/python -m compileall -q /opt/bookmgr/server/app
+
+# 3. Create the settings file (KEY=value lines, no `export`)
+sudo install -d -o root -g root -m 700 /etc/bookmgr
+sudo install -o root -g root -m 600 /dev/null /etc/bookmgr/bookmgr.env
+sudoedit /etc/bookmgr/bookmgr.env
+
+# 4. Install and start the unit
+sudo cp deploy/bookmgr.service /etc/systemd/system/bookmgr.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now bookmgr
+```
+
+`/etc/bookmgr/bookmgr.env` の内容（`DB_PATH` は必ず `/var/lib/bookmgr` の下にする）:
+
+```sh
+API_KEY=...
+HOST=127.0.0.1
+PORT=8090
+COOKIE_SECURE=true
+DB_PATH=/var/lib/bookmgr/bookmgr.db
+GOOGLE_BOOKS_API_KEY=...
+```
+
+- `/opt/bookmgr` はサービスから書き込めないので、`compileall` で `.pyc`（Pythonのキャッシュ）を事前に作っておく。省略しても動くが、起動のたびにコンパイルされる。
+- DBが無ければ初回起動時に作られ、マイグレーションが適用される。
+
+#### ユーザーユニットからの移行
+
+すでに `deploy/bookmgr.user.service` で動かしている場合は、上の手順1・2を行ってから、手順3の代わりに既存の設定とDBを移す。
+
+```sh
+# Copy the existing settings and point DB_PATH to the new location
+sudo install -d -o root -g root -m 700 /etc/bookmgr
+sudo install -o root -g root -m 600 bookmgr.env /etc/bookmgr/bookmgr.env
+sudo sed -i 's|^DB_PATH=.*|DB_PATH=/var/lib/bookmgr/bookmgr.db|' /etc/bookmgr/bookmgr.env
+sudo grep -E '^(HOST|PORT|DB_PATH|COOKIE_SECURE)=' /etc/bookmgr/bookmgr.env   # check non-secret values
+
+# Stop the old user service (the port must be free)
+systemctl --user disable --now bookmgr
+
+# Back up the database and check that no -journal / -wal files are left
+cp -p server/db/bookmgr.db ~/bookmgr.db.bak-$(date +%Y%m%d)
+ls server/db/
+
+# Move the database to the new location
+sudo install -d -o bookmgr -g bookmgr -m 700 /var/lib/bookmgr
+sudo install -o bookmgr -g bookmgr -m 600 server/db/bookmgr.db /var/lib/bookmgr/bookmgr.db
+```
+
+元の `bookmgr.env` に `DB_PATH` の行が無い場合は、`sed` では追加されないので `sudoedit /etc/bookmgr/bookmgr.env` で書き足す。続けて手順4でユニットを配置して起動し、問題なく動くことを確認したら古いユニットを削除する。
+
+```sh
+rm ~/.config/systemd/user/bookmgr.service
+systemctl --user daemon-reload
+```
+
+- 他にユーザーユニットが無ければ、`sudo loginctl disable-linger $USER` でlinger（ログアウト中もユーザーユニットを動かし続ける設定）を無効にできる。
+- `server/db/bookmgr.db` とバックアップは、しばらく運用して問題がないことを確かめてから削除する。リポジトリルートの `bookmgr.env` もAPIキーを含むので、ローカルでの開発に使わないなら削除する。
+
+元に戻す場合は、`sudo systemctl disable --now bookmgr` で止めてから、DBを `server/db/` に戻し（所有者を自分にする）、ユーザーユニットを元に戻して `systemctl --user enable --now bookmgr` を実行する。専用ユーザーで動かしていた間に更新されたデータも戻したいときは、`/var/lib/bookmgr/bookmgr.db` を `sudo cp` でコピーしてから `sudo chown $USER: server/db/bookmgr.db` とする。
+
+#### 動作確認
+
+```sh
+systemctl status bookmgr
+ps -o user,pid,args -C python        # The process must run as bookmgr
+ss -ltn | grep 8090                  # Listening on 127.0.0.1:8090
+sudo journalctl -u bookmgr -f        # Follow the log while using the app
+systemd-analyze security bookmgr     # Sandbox exposure score (for reference)
+```
+
+ブラウザでログイン・一覧表示・登録を試し、新規登録画面でISBNの「取得」（Google Books APIへの接続）も動くことを確認する。
+
+#### コードの更新
+
+リポジトリで変更をコミットしたら、`/opt/bookmgr` に反映してサービスを再起動する。`requirements.txt` を変えた場合は `pip install` もやり直す。
+
+```sh
+sudo rsync -a --delete --chown=root:root \
+  --exclude .venv --exclude db --exclude tests --exclude .pytest_cache \
+  --exclude start.sh --exclude '__pycache__' --exclude '*.swp' \
+  server/ /opt/bookmgr/server/
+sudo rsync -a --delete --chown=root:root db/migrations/ /opt/bookmgr/db/migrations/
+sudo /opt/bookmgr/server/.venv/bin/python -m compileall -q /opt/bookmgr/server/app
+sudo systemctl restart bookmgr
+```
+
+設定（`/etc/bookmgr/bookmgr.env`）を変えた場合も `sudo systemctl restart bookmgr` で反映する。
+
+#### 起動に失敗する場合
+
+`journalctl -u bookmgr` に `SIGSYS`（禁止されたシステムコールの呼び出し）や `Permission denied` が出る場合は、サンドボックス設定が原因。uvicorn[standard] が使うコンパイル済みのライブラリ（uvloop・pydantic-coreなど）とぶつかることがある。`/etc/systemd/system/bookmgr.service` の該当しそうな行（`MemoryDenyWriteExecute`、`SystemCallFilter` など）を1行ずつコメントアウトし、`sudo systemctl daemon-reload && sudo systemctl restart bookmgr` で原因を絞り込む。
+
+`unable to open database file` が出る場合は、`DB_PATH` が `/var/lib/bookmgr` の下を指しているか確認する。書き込めるのはこのディレクトリだけ。
 
 ### ユーザー権限で動かす場合（systemdユーザーユニット）
 
-専用ユーザーを作らず、自分のアカウントのsystemd（`systemctl --user`）でサーバーを常駐させることもできる。root権限が要るのは初回の `enable-linger` だけ。ユニットファイルは `deploy/bookmgr.user.service`。リポジトリが `~/services/bookmgr` にある前提で書いてあるので、違う場所に置く場合はパスを書き換える（`%h` はホームディレクトリに置き換わる）。
+専用ユーザーを作らず、自分のアカウントのsystemd（`systemctl --user`）でサーバーを常駐させることもできる。root権限が要るのは初回の `enable-linger` だけ。ただしsudoなどの権限を持つアカウントで動かすことになるため、本番では上の「専用ユーザーで動かす場合」を推奨する。ユニットファイルは `deploy/bookmgr.user.service`。リポジトリが `~/services/bookmgr` にある前提で書いてあるので、違う場所に置く場合はパスを書き換える（`%h` はホームディレクトリに置き換わる）。
 
 1. 依存パッケージをvenvに入れる（初回と `requirements.txt` を更新したときだけ。ユニット側ではインストールしない）。
 
